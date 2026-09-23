@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en-US">
+    <head>
+        <title>irish seasonal sky viewer</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="description" content="A 3D view of the horizon from a given place and time, for watching the sun and moon the way a stone circle would"/>
+
+        <style type="text/css">
+            html, body { margin: 0; height: 100%; overflow: hidden; }
+            body { font-family: Arial, Helvetica, sans-serif; background: #012; color: #fff; }
+            #scene { position: fixed; inset: 0; }
+            #scene canvas { display: block; }
+
+            #observer {
+                position: fixed; top: 1rem; left: 1rem;
+                max-width: calc(100vw - 2rem); box-sizing: border-box;
+                padding: .75rem 1rem; border-radius: 6px;
+                background: rgba(0, 17, 34, .75);
+            }
+            #observer .title { margin: 0 0 .5rem; font-weight: bold; }
+            #observer .fields { display: grid; grid-template-columns: auto auto; gap: .4rem .75rem; align-items: center; }
+            #observer label { font-size: .85rem; }
+            #observer input { font: inherit; font-size: .9rem; width: 9.5rem; padding: .15rem .3rem; box-sizing: border-box; }
+            #observer input.invalid { outline: 2px solid #f55; }
+
+            #hud {
+                position: fixed; left: 50%; bottom: 1rem; transform: translateX(-50%);
+                display: flex; align-items: center; gap: .75rem;
+                padding: .4rem .6rem; border-radius: 6px;
+                background: rgba(0, 17, 34, .75);
+                user-select: none; -webkit-user-select: none;
+            }
+            #hud button {
+                font: inherit; font-size: 1.1rem; width: 2.5rem; height: 2.5rem;
+                border: 1px solid #9ab; border-radius: 4px; background: #234; color: #fff;
+                touch-action: none;
+            }
+            #heading { min-width: 7rem; text-align: center; }
+            #heading .deg { font-size: 1.2rem; font-weight: bold; }
+            #heading .hint { font-size: .75rem; opacity: .75; }
+        </style>
+
+        <!-- Three.js is loaded from js/lib/three (r186). to load it from the CDN instead,
+             uncomment this block and comment out the local import map below
+             (import maps are JSON, which doesn't allow comments inside it, and only one can be active)
+        <script type="importmap">
+            {
+                "imports": {
+                    "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js"
+                }
+            }
+        </script>
+        -->
+        <script type="importmap">
+            {
+                "imports": {
+                    "three": "./js/lib/three/three.module.js"
+                }
+            }
+        </script>
+    </head>
+    <body>
+
+        <div id="scene"></div>
+
+        <form id="observer" autocomplete="off">
+            <p class="title">Observer</p>
+            <div class="fields">
+                <label for="lat">Latitude</label>
+                <input id="lat" type="number" step="any" min="-90" max="90" value="53.6947">
+                <label for="lon">Longitude</label>
+                <input id="lon" type="number" step="any" min="-180" max="180" value="-6.4755">
+                <label for="date">Date</label>
+                <input id="date" type="date">
+                <label for="time">Time (UTC)</label>
+                <input id="time" type="time">
+            </div>
+        </form>
+
+        <div id="hud">
+            <button id="turnLeft" type="button" aria-label="Turn left">&#9664;</button>
+            <div id="heading">
+                <div class="deg"></div>
+                <div class="hint">&larr; &rarr; to turn</div>
+            </div>
+            <button id="turnRight" type="button" aria-label="Turn right">&#9654;</button>
+        </div>
+
+        <script type="module" src="js/viewer.js?v=20260923"></script>
+
+    </body>
+</html>
