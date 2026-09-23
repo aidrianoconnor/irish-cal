@@ -1,7 +1,7 @@
 # irish-cal
 a simple web-based visualizer of where the current day falls in solar, lunar and Irish "Fire Festival" cycles
 
-at the current time all data is manually copy / pasted (with minor edits) into data.js from the very useful astronomical data API provided by the US Navy at https://aa.usno.navy.mil/data/api
+all dates are calculated in the browser, so there is no data to keep up to date: solstices, equinoxes and moon phases use the algorithms from Jean Meeus' "Astronomical Algorithms" (seasons.js and moon.js), and the fire festivals fall on the first of February, May, August and November. the calculations were checked against the very useful astronomical data API provided by the US Navy at https://aa.usno.navy.mil/data/api, which the app originally used, and match it to within a minute
 
 the focus of the project was to create a calendar UI that would present the current time of year in an experience that might be lightly akin to neolithic / bronze age Irish people who tracked time via "standing stone" circles, ie in a less linear, more cyclical fashion without the specific month / day names of our modern Julian calendar.  by observing the positions and phases of the moon, one might understand the current day as something along the lines of "just past Samhain" or "approaching the second new moon after Bealtaine" as opposed to, say, "July 13."
 

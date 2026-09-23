@@ -8,29 +8,6 @@ var MOON_PHASES = ['New Moon', 'First Quarter', 'Full Moon', 'Last Quarter'];
 var SYNODIC_MONTH = 29.530588861;
 var NEW_MOON_EPOCH_JDE = 2451550.09766;
 
-function degSin(deg) {
-    return Math.sin(deg * Math.PI / 180);
-}
-
-function degCos(deg) {
-    return Math.cos(deg * Math.PI / 180);
-}
-
-function dateToJD(date) {
-    return (date.getTime() / 86400000) + 2440587.5;
-}
-
-function jdToDate(jd) {
-    return new Date((jd - 2440587.5) * 86400000);
-}
-
-// difference between Terrestrial Time and Universal Time, in seconds
-// polynomial from Espenak & Meeus, valid 2005 - 2050
-function deltaTSeconds(year) {
-    var t = year - 2000;
-    return 62.92 + (0.32217 * t) + (0.005589 * t * t);
-}
-
 // k is the lunation number (0 = new moon of Jan 6, 2000)
 // phaseIndex: 0 = new, 1 = first quarter, 2 = full, 3 = last quarter
 // returns the moment of that phase as a Date (UTC)
@@ -133,30 +110,17 @@ function calcMoonPhase(k, phaseIndex) {
         c += planetary[i][0] * degSin(planetary[i][1]);
     }
 
-    jde += c;
-
-    // JDE is in Terrestrial Time; convert to UT
-    var approxYear = 2000 + (k / 12.3685);
-    return jdToDate(jde - (deltaTSeconds(approxYear) / 86400));
+    return jdeToDate(jde + c);
 }
 
-// builds moon phase entries in the same shape as the USNO data
-// ({day, month, phenom, time, year} in UTC, rounded to the minute),
-// covering a few lunations either side of the given date
+// builds moon phase entries covering a few lunations either side of the given date
 function calcMoonPhaseData(aroundDate) {
     var kNow = Math.floor((dateToJD(aroundDate) - NEW_MOON_EPOCH_JDE) / SYNODIC_MONTH);
     var data = [];
 
     for(var k = kNow - 2; k <= kNow + 2; k++) {
         for(var p = 0; p < 4; p++) {
-            var date = new Date(Math.round(calcMoonPhase(k, p).getTime() / 60000) * 60000);
-            data.push({
-                day: date.getUTCDate(),
-                month: date.getUTCMonth() + 1,
-                phenom: MOON_PHASES[p],
-                time: ('0' + date.getUTCHours()).slice(-2) + ':' + ('0' + date.getUTCMinutes()).slice(-2),
-                year: date.getUTCFullYear()
-            });
+            data.push(makeDataObjFromDate(calcMoonPhase(k, p), MOON_PHASES[p]));
         }
     }
 

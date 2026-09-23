@@ -323,6 +323,8 @@ function appInit() {
 
     var today = new Date();
 
+    seasonsData.data = calcSeasonData(today);
+    fireFestivalsData.data = calcFireFestivalData(today);
     moonData.data = calcMoonPhaseData(today);
 
     prepCalData(seasonsData);
