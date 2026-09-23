@@ -20,7 +20,8 @@
             }
             #observer .title { margin: 0 0 .5rem; font-weight: bold; }
             #observer .fields { display: grid; grid-template-columns: auto auto; gap: .4rem .75rem; align-items: center; }
-            #observer label { font-size: .85rem; }
+            #observer label, #observer .label { font-size: .85rem; }
+            #observer .readout { font-size: .85rem; max-width: 9.5rem; }
             #observer input { font: inherit; font-size: .9rem; width: 9.5rem; padding: .15rem .3rem; box-sizing: border-box; }
             #observer input.invalid { outline: 2px solid #f55; }
 
@@ -92,6 +93,8 @@
                 <input id="date" type="date">
                 <label for="time">Time (UTC)</label>
                 <input id="time" type="time">
+                <span class="label">Sun</span>
+                <span id="sunPosition" class="readout"></span>
             </div>
         </form>
 
@@ -110,7 +113,9 @@
             </div>
         </div>
 
-        <script type="module" src="js/viewer.js?v=20260924g"></script>
+        <script src="js/astro.js?v=20260924"></script>
+        <script src="js/sun.js?v=20260924"></script>
+        <script type="module" src="js/viewer.js?v=20260924h"></script>
 
     </body>
 </html>

@@ -19,8 +19,6 @@ var LOOK_SENSITIVITY = 0.15; // degrees per pixel of mouse movement
 var MAX_PITCH = 85; // how far up / down the observer can look, in degrees
 var RESET_HEADING = 180; // the observer starts (and resets to) looking south
 var SKY_RADIUS = 500;
-// where the sun sits until it's calculated from the observer's time and place
-var DEFAULT_SUN = { azimuth: 180, altitude: 45 };
 
 var DIRECTIONS = [
     { label: 'N', azimuth: 0, cardinal: true },
@@ -171,7 +169,6 @@ function setSun(azimuth, altitude) {
     sunLight.intensity = 1.4 * THREE.MathUtils.smoothstep(altitude, -2, 6); // fades out as the sun sets
 }
 
-setSun(DEFAULT_SUN.azimuth, DEFAULT_SUN.altitude);
 
 var ground = new THREE.Mesh(
     new THREE.CircleGeometry(GROUND_RADIUS, 128),
@@ -236,9 +233,14 @@ var pitch = 0; // degrees above (+) or below (-) the horizon
 var turnDirection = { key: 0, button: 0 }; // 1 = right, -1 = left
 var moveDirection = { key: 0, button: 0 }; // 1 = forward, -1 = back
 
+// e.g. "045° NE"
+function formatHeading(azimuth) {
+    var nearest = DIRECTIONS[Math.round(azimuth / 45) % 8].label;
+    return ('00' + (Math.round(azimuth) % 360)).slice(-3) + '° ' + nearest;
+}
+
 function updateHeadingDisplay() {
-    var nearest = DIRECTIONS[Math.round(heading / 45) % 8].label;
-    var text = ('00' + (Math.round(heading) % 360)).slice(-3) + '° ' + nearest;
+    var text = formatHeading(heading);
     var roundedPitch = Math.round(pitch);
     if(roundedPitch != 0) {
         text += ' · ' + Math.abs(roundedPitch) + '° ' + (roundedPitch > 0 ? 'up' : 'down');
@@ -443,8 +445,15 @@ function readObserverInputs() {
     onObserverChange(observer);
 }
 
-// hook for things that depend on where / when the observer is (sun, moon, stars...)
+// updates everything that depends on where / when the observer is
 function onObserverChange(obs) {
+    // calcSunPosition is from sun.js, loaded as a regular script before this module
+    var sun = calcSunPosition(obs.date, obs.lat, obs.lon);
+    setSun(sun.azimuth, sun.altitude);
+
+    var alt = Math.round(sun.altitude);
+    document.getElementById('sunPosition').textContent =
+        formatHeading(sun.azimuth) + ' · ' + Math.abs(alt) + '° ' + (alt >= 0 ? 'above' : 'below') + ' the horizon';
 }
 
 document.getElementById('observer').addEventListener('input', readObserverInputs);
@@ -482,10 +491,6 @@ window.addEventListener('resize', function() {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
-
-// for trying out sun positions from the browser console, e.g. viewer.setSun(250, -4) for a sunset,
-// until the sun is calculated from the observer's time and place
-window.viewer = { setSun: setSun };
 
 initObserverInputs();
 readObserverInputs();
