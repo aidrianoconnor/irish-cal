@@ -20,7 +20,7 @@ var MAX_PITCH = 85; // how far up / down the observer can look, in degrees
 var RESET_HEADING = 180; // the observer starts (and resets to) looking south
 var SKY_RADIUS = 500;
 var MOON_DISTANCE = 400; // inside the sky dome
-var MOON_SIZE_SCALE = 3; // the real moon (about 0.5 deg across) is drawn this many times larger so it's easy to see
+var MOON_SIZE_SCALE = 6; // the real moon (about 0.5 deg across) is drawn this many times larger so it's easy to see
 
 var DIRECTIONS = [
     { label: 'N', azimuth: 0, cardinal: true },
@@ -175,15 +175,69 @@ function setSun(azimuth, altitude) {
     sunLight.position.copy(direction).multiplyScalar(100);
     sunLight.intensity = 1.4 * THREE.MathUtils.smoothstep(altitude, -2, 6); // fades out as the sun sets
 
-    // the moon is fainter against a daylit sky
-    moon.material.opacity = THREE.MathUtils.lerp(1, 0.8, daylight);
+    moon.material.uniforms.daylight.value = daylight;
 }
 
-// the moon: a pale disc placed in the sky, drawn larger than life (see MOON_SIZE_SCALE).
-// like the sky dome, it's kept a fixed distance from the observer so it seems infinitely far away
+// the moon: a ball lit from the sun's direction, so it shows the right phase (and the lit side
+// points towards the sun) without any phase calculations. it has its own shading rather than
+// using the scene's lights, so it stays bright at night. the shadowed side glows very faintly
+// (like earthshine) so that even a new moon can just be made out.
+// the ball is drawn as a flat disc that always faces the observer, with the sphere's surface worked
+// out exactly for each pixel; a triangulated sphere lets light leak around its outline near new moon.
+// drawn larger than life (see MOON_SIZE_SCALE), and like the sky dome it's kept a fixed distance
+// from the observer so it seems infinitely far away
+var MOON_VERTEX_SHADER = [
+    'varying vec2 vDisc;',
+    'varying mat3 vDiscToWorld;',
+    'void main() {',
+    '    vDisc = position.xy;', // -1 to 1 across the disc
+    '    vDiscToWorld = mat3(modelMatrix);', // the disc's orientation (modelMatrix isn't available to fragment shaders)
+    '    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+    '}'
+].join('\n');
+
+var MOON_FRAGMENT_SHADER = [
+    'uniform vec3 sunDirection;',
+    'uniform float daylight;',
+    'uniform vec3 litColor;',
+    'uniform vec3 shadowColor;',
+    'varying vec2 vDisc;',
+    'varying mat3 vDiscToWorld;',
+    '',
+    'void main() {',
+    '    float r = length(vDisc);',
+    '    float edge = fwidth(r);',
+    '    float coverage = 1.0 - smoothstep(1.0 - edge, 1.0, r);', // smooth, anti-aliased outline
+    '    if(coverage <= 0.0) discard;',
+    '',
+    // the sphere's surface normal at this point, facing the observer, turned into world space
+    '    vec3 normal = normalize(vDiscToWorld * vec3(vDisc, sqrt(max(0.0, 1.0 - (r * r)))));',
+    '',
+    // 1 on the sunlit half, 0 on the shadowed half, with a narrow soft edge between them.
+    // (the real moon's lit side is fairly evenly bright, so there's no gradual shading across it)
+    '    float lit = smoothstep(0.0, 0.04, dot(normal, sunDirection));',
+    '',
+    // by day the whole moon is a little washed out, and the shadowed side fainter still
+    '    float litOpacity = mix(1.0, 0.8, daylight);',
+    '    float shadowOpacity = mix(0.18, 0.16, daylight);',
+    '',
+    '    gl_FragColor = vec4(mix(shadowColor, litColor, lit), mix(shadowOpacity, litOpacity, lit) * coverage);',
+    '}'
+].join('\n');
+
 var moon = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 48, 24),
-    new THREE.MeshBasicMaterial({ color: '#f4f1e6', transparent: true })
+    new THREE.PlaneGeometry(2, 2),
+    new THREE.ShaderMaterial({
+        uniforms: {
+            sunDirection: { value: skyDome.material.uniforms.sunDirection.value }, // shared with the sky
+            daylight: { value: 0 },
+            litColor: { value: srgbColor('#f4f1e6') },
+            shadowColor: { value: srgbColor('#aab4cc') }
+        },
+        vertexShader: MOON_VERTEX_SHADER,
+        fragmentShader: MOON_FRAGMENT_SHADER,
+        transparent: true
+    })
 );
 var moonOffset = new THREE.Vector3(); // from the observer to the moon
 scene.add(moon);
@@ -481,6 +535,9 @@ function onObserverChange(obs) {
     var moonPos = calcMoonPosition(obs.date, obs.lat, obs.lon);
     setMoon(moonPos.azimuth, moonPos.altitude, moonPos.diameter);
     document.getElementById('moonPosition').textContent = formatSkyPosition(moonPos);
+
+    var phase = calcMoonIllumination(obs.date);
+    document.getElementById('moonPhase').textContent = phase.name + ' · ' + Math.round(phase.illumination * 100) + '% lit';
 }
 
 // e.g. "174° S · 36° above the horizon"
@@ -516,6 +573,7 @@ function animate(time) {
     // the sky is infinitely far away, so it stays centred on the observer as they walk
     skyDome.position.copy(camera.position);
     moon.position.copy(camera.position).add(moonOffset);
+    moon.lookAt(camera.position); // the moon's disc always faces the observer
 
     renderer.render(scene, camera);
 }

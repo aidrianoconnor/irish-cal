@@ -156,7 +156,7 @@ var MOON_LATITUDE_TERMS = [
 
 var EARTH_RADIUS_KM = 6378.14;
 
-// the moon's apparent (geocentric) right ascension and declination (degrees) and distance (km)
+// the moon's apparent (geocentric) right ascension, declination and ecliptic longitude (degrees) and distance (km)
 function calcMoonEquatorial(date) {
     // the lunar theory runs on Terrestrial Time, and the moon moves fast enough for the difference to matter
     var jde = dateToJD(date) + (deltaTSeconds(date.getUTCFullYear()) / 86400);
@@ -207,7 +207,8 @@ function calcMoonEquatorial(date) {
     return {
         ra: Math.atan2((degSin(lambda) * degCos(epsilon)) - (Math.tan(beta * Math.PI / 180) * degSin(epsilon)), degCos(lambda)) * 180 / Math.PI,
         dec: Math.asin((degSin(beta) * degCos(epsilon)) + (degCos(beta) * degSin(epsilon) * degSin(lambda))) * 180 / Math.PI,
-        distance: distance
+        distance: distance,
+        longitude: lambda // apparent ecliptic longitude
     };
 }
 
@@ -226,4 +227,39 @@ function calcMoonPosition(date, latitude, longitude) {
     pos.distance = eq.distance;
     pos.diameter = 2 * Math.asin(1737.4 / eq.distance) * 180 / Math.PI;
     return pos;
+}
+
+// how much of the moon is lit, and where it is in its cycle, at the given moment
+// (Meeus chapter 48, using the sun-moon elongation; the sun's distance makes a negligible difference here)
+// returns { illumination (0 - 1), age (degrees: 0 new, 90 first quarter, 180 full, 270 last quarter), name }
+function calcMoonIllumination(date) {
+    var sun = calcSunEquatorial(date);
+    var moon = calcMoonEquatorial(date);
+
+    // angle between the sun and the moon as seen from the Earth
+    var cosElongation = (degSin(sun.dec) * degSin(moon.dec)) + (degCos(sun.dec) * degCos(moon.dec) * degCos(sun.ra - moon.ra));
+
+    // the phases are defined by how far the moon is ahead of the sun along the ecliptic
+    var age = (((moon.longitude - sun.longitude) % 360) + 360) % 360;
+
+    return {
+        illumination: (1 - cosElongation) / 2,
+        age: age,
+        name: moonPhaseName(age)
+    };
+}
+
+// the principal phases are named for about a day either side (the moon moves ~12 deg a day against the sun)
+function moonPhaseName(age) {
+    var PRINCIPAL_WINDOW = 12;
+    var principal = [[0, 'New moon'], [90, 'First quarter'], [180, 'Full moon'], [270, 'Last quarter'], [360, 'New moon']];
+    for(var i = 0; i < principal.length; i++) {
+        if(Math.abs(age - principal[i][0]) <= PRINCIPAL_WINDOW) {
+            return principal[i][1];
+        }
+    }
+    if(age < 90) return 'Waxing crescent';
+    if(age < 180) return 'Waxing gibbous';
+    if(age < 270) return 'Waning gibbous';
+    return 'Waning crescent';
 }

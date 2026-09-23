@@ -2,7 +2,7 @@
 // low accuracy solar coordinates from Jean Meeus, "Astronomical Algorithms" (2nd ed.), chapter 25
 // (good to about 0.01 deg); the conversion to the observer's sky is in astro.js
 
-// the sun's apparent right ascension and declination (degrees) at the given moment
+// the sun's apparent right ascension, declination and ecliptic longitude (degrees) at the given moment
 function calcSunEquatorial(date) {
     var jd = dateToJD(date);
     var T = (jd - 2451545.0) / 36525;
@@ -23,7 +23,8 @@ function calcSunEquatorial(date) {
 
     return {
         ra: Math.atan2(degCos(epsilon) * degSin(lambda), degCos(lambda)) * 180 / Math.PI,
-        dec: Math.asin(degSin(epsilon) * degSin(lambda)) * 180 / Math.PI
+        dec: Math.asin(degSin(epsilon) * degSin(lambda)) * 180 / Math.PI,
+        longitude: lambda // apparent ecliptic longitude
     };
 }
 
