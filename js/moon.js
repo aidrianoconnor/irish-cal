@@ -126,3 +126,104 @@ function calcMoonPhaseData(aroundDate) {
 
     return data;
 }
+
+// the moon's position in the sky for an observer
+// from Meeus chapter 47, using the largest terms of the lunar series (good to a few hundredths of a degree)
+
+// periodic terms for longitude and distance: [D, M, M', F, longitude (1e-6 deg), distance (1e-3 km)]
+var MOON_LONGITUDE_DISTANCE_TERMS = [
+    [0, 0, 1, 0, 6288774, -20905355], [2, 0, -1, 0, 1274027, -3699111], [2, 0, 0, 0, 658314, -2955968],
+    [0, 0, 2, 0, 213618, -569925], [0, 1, 0, 0, -185116, 48888], [0, 0, 0, 2, -114332, -3149],
+    [2, 0, -2, 0, 58793, 246158], [2, -1, -1, 0, 57066, -152138], [2, 0, 1, 0, 53322, -170733],
+    [2, -1, 0, 0, 45758, -204586], [0, 1, -1, 0, -40923, -129620], [1, 0, 0, 0, -34720, 108743],
+    [0, 1, 1, 0, -30383, 104755], [2, 0, 0, -2, 15327, 10321], [0, 0, 1, 2, -12528, 0],
+    [0, 0, 1, -2, 10980, 79661], [4, 0, -1, 0, 10675, -34782], [0, 0, 3, 0, 10034, -23210],
+    [4, 0, -2, 0, 8548, -21636], [2, 1, -1, 0, -7888, 24208], [2, 1, 0, 0, -6766, 30824],
+    [1, 0, -1, 0, -5163, -8379], [1, 1, 0, 0, 4987, -16675], [2, -1, 1, 0, 4036, -12831],
+    [2, 0, 2, 0, 3994, -10445], [4, 0, 0, 0, 3861, -11650], [2, 0, -3, 0, 3665, 14403],
+    [0, 1, -2, 0, -2689, -7003], [2, 0, -1, 2, -2602, 0], [2, -1, -2, 0, 2390, 10056],
+    [1, 0, 1, 0, -2348, 6322], [2, -2, 0, 0, 2236, -9884]
+];
+
+// periodic terms for latitude: [D, M, M', F, latitude (1e-6 deg)]
+var MOON_LATITUDE_TERMS = [
+    [0, 0, 0, 1, 5128122], [0, 0, 1, 1, 280602], [0, 0, 1, -1, 277693], [2, 0, 0, -1, 173237],
+    [2, 0, -1, 1, 55413], [2, 0, -1, -1, 46271], [2, 0, 0, 1, 32573], [0, 0, 2, 1, 17198],
+    [2, 0, 1, -1, 9266], [0, 0, 2, -1, 8822], [2, -1, 0, -1, 8216], [2, 0, -2, -1, 4324],
+    [2, 0, 1, 1, 4200], [2, 1, 0, -1, -3359], [2, -1, -1, 1, 2463], [2, -1, 0, 1, 2211],
+    [2, -1, -1, -1, 2065], [0, 1, -1, -1, -1870], [4, 0, -1, -1, 1828], [0, 1, 0, 1, -1794]
+];
+
+var EARTH_RADIUS_KM = 6378.14;
+
+// the moon's apparent (geocentric) right ascension and declination (degrees) and distance (km)
+function calcMoonEquatorial(date) {
+    // the lunar theory runs on Terrestrial Time, and the moon moves fast enough for the difference to matter
+    var jde = dateToJD(date) + (deltaTSeconds(date.getUTCFullYear()) / 86400);
+    var T = (jde - 2451545.0) / 36525;
+    var T2 = T * T, T3 = T2 * T, T4 = T3 * T;
+
+    // mean longitude, mean elongation, sun's and moon's mean anomalies, argument of latitude
+    var Lp = 218.3164477 + (481267.88123421 * T) - (0.0015786 * T2) + (T3 / 538841) - (T4 / 65194000);
+    var D = 297.8501921 + (445267.1114034 * T) - (0.0018819 * T2) + (T3 / 545868) - (T4 / 113065000);
+    var M = 357.5291092 + (35999.0502909 * T) - (0.0001536 * T2) + (T3 / 24490000);
+    var Mp = 134.9633964 + (477198.8675055 * T) + (0.0087414 * T2) + (T3 / 69699) - (T4 / 14712000);
+    var F = 93.2720950 + (483202.0175233 * T) - (0.0036539 * T2) - (T3 / 3526000) + (T4 / 863310000);
+
+    var A1 = 119.75 + (131.849 * T);
+    var A2 = 53.09 + (479264.290 * T);
+    var A3 = 313.45 + (481266.484 * T);
+
+    // terms involving the sun's anomaly shrink with the Earth's orbital eccentricity
+    var E = 1 - (0.002516 * T) - (0.0000074 * T2);
+
+    var sumL = 0, sumR = 0, sumB = 0, i, t, arg, e;
+
+    for(i = 0; i < MOON_LONGITUDE_DISTANCE_TERMS.length; i++) {
+        t = MOON_LONGITUDE_DISTANCE_TERMS[i];
+        arg = (t[0] * D) + (t[1] * M) + (t[2] * Mp) + (t[3] * F);
+        e = Math.pow(E, Math.abs(t[1]));
+        sumL += t[4] * e * degSin(arg);
+        sumR += t[5] * e * degCos(arg);
+    }
+    for(i = 0; i < MOON_LATITUDE_TERMS.length; i++) {
+        t = MOON_LATITUDE_TERMS[i];
+        arg = (t[0] * D) + (t[1] * M) + (t[2] * Mp) + (t[3] * F);
+        sumB += t[4] * Math.pow(E, Math.abs(t[1])) * degSin(arg);
+    }
+
+    // additional terms from Venus, Jupiter and the Earth's flattening
+    sumL += (3958 * degSin(A1)) + (1962 * degSin(Lp - F)) + (318 * degSin(A2));
+    sumB += (-2235 * degSin(Lp)) + (382 * degSin(A3)) + (175 * degSin(A1 - F)) + (175 * degSin(A1 + F))
+          + (127 * degSin(Lp - Mp)) - (115 * degSin(Lp + Mp));
+
+    // ecliptic longitude (with nutation) and latitude, and distance
+    var lambda = Lp + (sumL / 1000000) - (0.00478 * degSin(lunarNodeLongitude(T)));
+    var beta = sumB / 1000000;
+    var distance = 385000.56 + (sumR / 1000);
+
+    var epsilon = trueObliquity(T);
+
+    return {
+        ra: Math.atan2((degSin(lambda) * degCos(epsilon)) - (Math.tan(beta * Math.PI / 180) * degSin(epsilon)), degCos(lambda)) * 180 / Math.PI,
+        dec: Math.asin((degSin(beta) * degCos(epsilon)) + (degCos(beta) * degSin(epsilon) * degSin(lambda))) * 180 / Math.PI,
+        distance: distance
+    };
+}
+
+// the moon's position as seen by an observer at the given latitude / longitude (degrees) and moment:
+// { azimuth, altitude } in degrees, with altitude as it appears (including parallax and refraction),
+// plus its distance (km) and apparent diameter (degrees)
+function calcMoonPosition(date, latitude, longitude) {
+    var eq = calcMoonEquatorial(date);
+    var pos = equatorialToHorizontal(eq.ra, eq.dec, date, latitude, longitude);
+
+    // parallax: seen from the Earth's surface rather than its centre, the moon sits lower in the sky
+    var horizontalParallax = Math.asin(EARTH_RADIUS_KM / eq.distance) * 180 / Math.PI;
+    pos.altitude -= horizontalParallax * degCos(pos.altitude);
+    pos.altitude += atmosphericRefraction(pos.altitude);
+
+    pos.distance = eq.distance;
+    pos.diameter = 2 * Math.asin(1737.4 / eq.distance) * 180 / Math.PI;
+    return pos;
+}

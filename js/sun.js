@@ -1,6 +1,6 @@
 // the sun's position in the sky for an observer
 // low accuracy solar coordinates from Jean Meeus, "Astronomical Algorithms" (2nd ed.), chapter 25
-// (good to about 0.01 deg), sidereal time from chapter 12 and horizontal coordinates from chapter 13
+// (good to about 0.01 deg); the conversion to the observer's sky is in astro.js
 
 // the sun's apparent right ascension and declination (degrees) at the given moment
 function calcSunEquatorial(date) {
@@ -17,47 +17,14 @@ function calcSunEquatorial(date) {
           + (0.000289 * degSin(3 * M));
 
     // apparent longitude, corrected for nutation and aberration
-    var omega = 125.04 - (1934.136 * T);
-    var lambda = L0 + C - 0.00569 - (0.00478 * degSin(omega));
+    var lambda = L0 + C - 0.00569 - (0.00478 * degSin(lunarNodeLongitude(T)));
 
-    // obliquity of the ecliptic
-    var epsilon = 23 + (26 / 60) + (21.448 / 3600) - (((46.8150 * T) + (0.00059 * T * T) - (0.001813 * T * T * T)) / 3600);
-    epsilon += 0.00256 * degCos(omega);
+    var epsilon = trueObliquity(T);
 
     return {
         ra: Math.atan2(degCos(epsilon) * degSin(lambda), degCos(lambda)) * 180 / Math.PI,
         dec: Math.asin(degSin(epsilon) * degSin(lambda)) * 180 / Math.PI
     };
-}
-
-// mean sidereal time at Greenwich (degrees) at the given moment
-function greenwichSiderealTime(date) {
-    var jd = dateToJD(date);
-    var T = (jd - 2451545.0) / 36525;
-    var theta = 280.46061837 + (360.98564736629 * (jd - 2451545.0)) + (0.000387933 * T * T) - ((T * T * T) / 38710000);
-    return ((theta % 360) + 360) % 360;
-}
-
-// how much the atmosphere lifts an object near the horizon (degrees), from Bennett's formula
-function atmosphericRefraction(altitude) {
-    if(altitude < -1) {
-        return 0;
-    }
-    return (1.02 / Math.tan((altitude + (10.3 / (altitude + 5.11))) * Math.PI / 180)) / 60;
-}
-
-// converts right ascension / declination to azimuth / altitude for an observer (all degrees)
-// latitude is positive north, longitude positive east; azimuth is clockwise from north
-function equatorialToHorizontal(ra, dec, date, latitude, longitude) {
-    var hourAngle = greenwichSiderealTime(date) + longitude - ra;
-
-    var altitude = Math.asin((degSin(latitude) * degSin(dec)) + (degCos(latitude) * degCos(dec) * degCos(hourAngle))) * 180 / Math.PI;
-    var azimuth = Math.atan2(
-        -degCos(dec) * degSin(hourAngle),
-        (degSin(dec) * degCos(latitude)) - (degCos(dec) * degCos(hourAngle) * degSin(latitude))
-    ) * 180 / Math.PI;
-
-    return { azimuth: ((azimuth % 360) + 360) % 360, altitude: altitude };
 }
 
 // the sun's position as seen by an observer at the given latitude / longitude (degrees) and moment:

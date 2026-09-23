@@ -41,3 +41,48 @@ function makeDataObjFromDate(date, phenom) {
         year: date.getUTCFullYear()
     };
 }
+
+// converting positions to the observer's sky
+// sidereal time from Meeus chapter 12, obliquity from chapter 22, horizontal coordinates from chapter 13
+
+// longitude of the moon's ascending node (degrees), which drives the main nutation terms
+// T is Julian centuries from J2000.0
+function lunarNodeLongitude(T) {
+    return 125.04 - (1934.136 * T);
+}
+
+// true obliquity of the ecliptic (degrees): the tilt of the Earth's axis, including nutation
+function trueObliquity(T) {
+    var mean = 23 + (26 / 60) + (21.448 / 3600) - (((46.8150 * T) + (0.00059 * T * T) - (0.001813 * T * T * T)) / 3600);
+    return mean + (0.00256 * degCos(lunarNodeLongitude(T)));
+}
+
+// mean sidereal time at Greenwich (degrees) at the given moment
+function greenwichSiderealTime(date) {
+    var jd = dateToJD(date);
+    var T = (jd - 2451545.0) / 36525;
+    var theta = 280.46061837 + (360.98564736629 * (jd - 2451545.0)) + (0.000387933 * T * T) - ((T * T * T) / 38710000);
+    return ((theta % 360) + 360) % 360;
+}
+
+// how much the atmosphere lifts an object near the horizon (degrees), from Bennett's formula
+function atmosphericRefraction(altitude) {
+    if(altitude < -1) {
+        return 0;
+    }
+    return (1.02 / Math.tan((altitude + (10.3 / (altitude + 5.11))) * Math.PI / 180)) / 60;
+}
+
+// converts right ascension / declination to azimuth / altitude for an observer (all degrees)
+// latitude is positive north, longitude positive east; azimuth is clockwise from north
+function equatorialToHorizontal(ra, dec, date, latitude, longitude) {
+    var hourAngle = greenwichSiderealTime(date) + longitude - ra;
+
+    var altitude = Math.asin((degSin(latitude) * degSin(dec)) + (degCos(latitude) * degCos(dec) * degCos(hourAngle))) * 180 / Math.PI;
+    var azimuth = Math.atan2(
+        -degCos(dec) * degSin(hourAngle),
+        (degSin(dec) * degCos(latitude)) - (degCos(dec) * degCos(hourAngle) * degSin(latitude))
+    ) * 180 / Math.PI;
+
+    return { azimuth: ((azimuth % 360) + 360) % 360, altitude: altitude };
+}

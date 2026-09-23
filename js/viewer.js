@@ -19,6 +19,8 @@ var LOOK_SENSITIVITY = 0.15; // degrees per pixel of mouse movement
 var MAX_PITCH = 85; // how far up / down the observer can look, in degrees
 var RESET_HEADING = 180; // the observer starts (and resets to) looking south
 var SKY_RADIUS = 500;
+var MOON_DISTANCE = 400; // inside the sky dome
+var MOON_SIZE_SCALE = 3; // the real moon (about 0.5 deg across) is drawn this many times larger so it's easy to see
 
 var DIRECTIONS = [
     { label: 'N', azimuth: 0, cardinal: true },
@@ -35,6 +37,13 @@ var DIRECTIONS = [
 function azimuthToXZ(azimuth, distance) {
     var rad = THREE.MathUtils.degToRad(azimuth);
     return { x: Math.sin(rad) * distance, z: -Math.cos(rad) * distance };
+}
+
+// unit vector towards a point in the sky at the given azimuth and altitude (degrees)
+function skyDirection(azimuth, altitude) {
+    var az = THREE.MathUtils.degToRad(azimuth);
+    var alt = THREE.MathUtils.degToRad(altitude);
+    return new THREE.Vector3(Math.cos(alt) * Math.sin(az), Math.sin(alt), -Math.cos(alt) * Math.cos(az));
 }
 
 // scene setup
@@ -154,9 +163,7 @@ var NIGHT_AMBIENT = { sky: new THREE.Color('#5a6a9a'), ground: new THREE.Color('
 // places the sun (degrees: azimuth clockwise from north, altitude above the horizon),
 // updating the sky colours and the lighting to match
 function setSun(azimuth, altitude) {
-    var az = THREE.MathUtils.degToRad(azimuth);
-    var alt = THREE.MathUtils.degToRad(altitude);
-    var direction = new THREE.Vector3(Math.cos(alt) * Math.sin(az), Math.sin(alt), -Math.cos(alt) * Math.cos(az));
+    var direction = skyDirection(azimuth, altitude);
 
     skyDome.material.uniforms.sunDirection.value.copy(direction);
 
@@ -167,6 +174,25 @@ function setSun(azimuth, altitude) {
 
     sunLight.position.copy(direction).multiplyScalar(100);
     sunLight.intensity = 1.4 * THREE.MathUtils.smoothstep(altitude, -2, 6); // fades out as the sun sets
+
+    // the moon is fainter against a daylit sky
+    moon.material.opacity = THREE.MathUtils.lerp(1, 0.8, daylight);
+}
+
+// the moon: a pale disc placed in the sky, drawn larger than life (see MOON_SIZE_SCALE).
+// like the sky dome, it's kept a fixed distance from the observer so it seems infinitely far away
+var moon = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 48, 24),
+    new THREE.MeshBasicMaterial({ color: '#f4f1e6', transparent: true })
+);
+var moonOffset = new THREE.Vector3(); // from the observer to the moon
+scene.add(moon);
+
+// places the moon (degrees: azimuth clockwise from north, altitude above the horizon, apparent diameter)
+function setMoon(azimuth, altitude, diameter) {
+    moonOffset.copy(skyDirection(azimuth, altitude)).multiplyScalar(MOON_DISTANCE);
+    moon.scale.setScalar(MOON_DISTANCE * Math.tan(THREE.MathUtils.degToRad(diameter * MOON_SIZE_SCALE / 2)));
+    moon.visible = altitude > -(diameter * MOON_SIZE_SCALE / 2); // hidden once it's set below the horizon
 }
 
 
@@ -447,13 +473,20 @@ function readObserverInputs() {
 
 // updates everything that depends on where / when the observer is
 function onObserverChange(obs) {
-    // calcSunPosition is from sun.js, loaded as a regular script before this module
+    // calcSunPosition and calcMoonPosition are from sun.js and moon.js, loaded as regular scripts before this module
     var sun = calcSunPosition(obs.date, obs.lat, obs.lon);
     setSun(sun.azimuth, sun.altitude);
+    document.getElementById('sunPosition').textContent = formatSkyPosition(sun);
 
-    var alt = Math.round(sun.altitude);
-    document.getElementById('sunPosition').textContent =
-        formatHeading(sun.azimuth) + ' · ' + Math.abs(alt) + '° ' + (alt >= 0 ? 'above' : 'below') + ' the horizon';
+    var moonPos = calcMoonPosition(obs.date, obs.lat, obs.lon);
+    setMoon(moonPos.azimuth, moonPos.altitude, moonPos.diameter);
+    document.getElementById('moonPosition').textContent = formatSkyPosition(moonPos);
+}
+
+// e.g. "174° S · 36° above the horizon"
+function formatSkyPosition(pos) {
+    var alt = Math.round(pos.altitude);
+    return formatHeading(pos.azimuth) + ' · ' + Math.abs(alt) + '° ' + (alt >= 0 ? 'above' : 'below') + ' the horizon';
 }
 
 document.getElementById('observer').addEventListener('input', readObserverInputs);
@@ -482,6 +515,7 @@ function animate(time) {
 
     // the sky is infinitely far away, so it stays centred on the observer as they walk
     skyDome.position.copy(camera.position);
+    moon.position.copy(camera.position).add(moonOffset);
 
     renderer.render(scene, camera);
 }
