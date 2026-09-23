@@ -10,7 +10,7 @@
             html, body { margin: 0; height: 100%; overflow: hidden; }
             body { font-family: Arial, Helvetica, sans-serif; background: #012; color: #fff; }
             #scene { position: fixed; inset: 0; }
-            #scene canvas { display: block; }
+            #scene canvas { display: block; touch-action: none; }
 
             #observer {
                 position: fixed; top: 1rem; left: 1rem;
@@ -26,19 +26,36 @@
 
             #hud {
                 position: fixed; left: 50%; bottom: 1rem; transform: translateX(-50%);
-                display: flex; align-items: center; gap: .75rem;
-                padding: .4rem .6rem; border-radius: 6px;
+                display: flex; flex-direction: column; align-items: center; gap: .5rem;
+                padding: .5rem .75rem .75rem; border-radius: 6px;
                 background: rgba(0, 17, 34, .75);
                 user-select: none; -webkit-user-select: none;
             }
-            #hud button {
-                font: inherit; font-size: 1.1rem; width: 2.5rem; height: 2.5rem;
+            #heading { min-width: 11rem; text-align: center; }
+            #heading .deg { font-size: 1.2rem; font-weight: bold; }
+            #heading .hint { font-size: .75rem; opacity: .75; }
+            #heading .touch-hint { display: none; }
+            @media (hover: none) and (pointer: coarse) {
+                #heading .mouse-hint { display: none; }
+                #heading .touch-hint { display: block; }
+            }
+
+            #controls {
+                display: grid; gap: .3rem;
+                grid-template-columns: repeat(3, 3rem); grid-template-rows: repeat(3, 3rem);
+                grid-template-areas: ". up ." "left reset right" ". down .";
+            }
+            #controls button {
+                font: inherit; font-size: 1.1rem;
                 border: 1px solid #9ab; border-radius: 4px; background: #234; color: #fff;
                 touch-action: none;
             }
-            #heading { min-width: 7rem; text-align: center; }
-            #heading .deg { font-size: 1.2rem; font-weight: bold; }
-            #heading .hint { font-size: .75rem; opacity: .75; }
+            #controls button:active { background: #3a5570; }
+            #moveForward { grid-area: up; }
+            #turnLeft { grid-area: left; }
+            #controls #reset { grid-area: reset; font-size: .7rem; }
+            #turnRight { grid-area: right; }
+            #moveBack { grid-area: down; }
         </style>
 
         <!-- Three.js is loaded from js/lib/three (r186). to load it from the CDN instead,
@@ -79,15 +96,21 @@
         </form>
 
         <div id="hud">
-            <button id="turnLeft" type="button" aria-label="Turn left">&#9664;</button>
             <div id="heading">
                 <div class="deg"></div>
-                <div class="hint">&larr; &rarr; to turn</div>
+                <div class="hint mouse-hint">&larr; &rarr; turn &middot; &uarr; &darr; move &middot; right-drag to look</div>
+                <div class="hint touch-hint">drag the view to look around</div>
             </div>
-            <button id="turnRight" type="button" aria-label="Turn right">&#9654;</button>
+            <div id="controls">
+                <button id="moveForward" type="button" aria-label="Move forward">&#9650;</button>
+                <button id="turnLeft" type="button" aria-label="Turn left">&#9664;</button>
+                <button id="reset" type="button" aria-label="Reset to the centre, facing south">Reset</button>
+                <button id="turnRight" type="button" aria-label="Turn right">&#9654;</button>
+                <button id="moveBack" type="button" aria-label="Move back">&#9660;</button>
+            </div>
         </div>
 
-        <script type="module" src="js/viewer.js?v=20260923"></script>
+        <script type="module" src="js/viewer.js?v=20260924e"></script>
 
     </body>
 </html>
