@@ -19,8 +19,8 @@ var LOOK_SENSITIVITY = 0.15; // degrees per pixel of mouse movement
 var MAX_PITCH = 85; // how far up / down the observer can look, in degrees
 var RESET_HEADING = 180; // the observer starts (and resets to) looking south
 var SKY_RADIUS = 500;
-var SKY_TOP_COLOR = '#3f9cff'; // daylight blue
-var SKY_BOTTOM_COLOR = '#000000'; // night
+// where the sun sits until it's calculated from the observer's time and place
+var DEFAULT_SUN = { azimuth: 180, altitude: 45 };
 
 var DIRECTIONS = [
     { label: 'N', azimuth: 0, cardinal: true },
@@ -54,43 +54,124 @@ var camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHei
 camera.position.set(0, EYE_HEIGHT, 0);
 camera.rotation.order = 'YXZ';
 
-// lighting for the ground and columns (the sky dome is unlit, so isn't affected):
+// lighting for the ground and columns (the sky dome is unlit, so isn't affected), set from the sun by setSun:
 // the hemisphere light is the ambient fill, lighting everything from all around with no position;
-// the directional light gives the columns some shading
-scene.add(new THREE.HemisphereLight('#cfe6ff', '#3d6b2a', 1.6));
-var sunLight = new THREE.DirectionalLight('#ffffff', 1.4);
-sunLight.position.set(30, 50, 20);
+// the directional light is the sunlight, shining from the sun's direction
+var ambientLight = new THREE.HemisphereLight();
+scene.add(ambientLight);
+var sunLight = new THREE.DirectionalLight('#fff6e8');
 scene.add(sunLight);
 
-// sky dome: a sphere seen from the inside, coloured with a gradient from
-// daylight blue at its top pole to night black at its bottom pole.
-// the colours are part of the sphere, so rotating it (e.g. for the time of day) moves the gradient with it
+// sky dome: a sphere seen from the inside, coloured by a shader from the sun's position.
+// each point's colour depends on its height above the horizon, how high the sun is
+// (day / twilight / night) and how close it is to the sun (the bright haze around it).
+// the colours come from world directions, so the dome itself can later be rotated (e.g. for stars)
+// without moving the daylight around
+var SKY_VERTEX_SHADER = [
+    'varying vec3 vDirection;',
+    'void main() {',
+    '    vDirection = normalize(mat3(modelMatrix) * position);',
+    '    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+    '}'
+].join('\n');
+
+var SKY_FRAGMENT_SHADER = [
+    'uniform vec3 sunDirection;',
+    'uniform vec3 dayZenith;',
+    'uniform vec3 dayHorizon;',
+    'uniform vec3 nightZenith;',
+    'uniform vec3 nightHorizon;',
+    'uniform vec3 twilightGlow;',
+    'varying vec3 vDirection;',
+    '',
+    'void main() {',
+    '    vec3 dir = normalize(vDirection);',
+    '    float height = clamp(dir.y, 0.0, 1.0);', // 0 at (and below) the horizon, 1 straight up
+    '    float sunHeight = sunDirection.y;',
+    '    float toSun = max(dot(dir, sunDirection), 0.0);',
+    '',
+    // day: pale, hazy horizon deepening to a rich blue overhead, brightest around the sun
+    '    vec3 day = mix(dayHorizon, dayZenith, pow(height, 0.5));',
+    '    day += vec3(1.0, 0.96, 0.88) * ((0.18 * pow(toSun, 24.0)) + (0.5 * pow(toSun, 400.0)));',
+    '',
+    // night: near black overhead, with a faint glow along the horizon
+    '    vec3 night = mix(nightHorizon, nightZenith, pow(height, 0.35));',
+    '',
+    // 0 once the sun is ~10 deg below the horizon (night), 1 once it's ~12 deg above (day)
+    '    float daylight = smoothstep(-0.17, 0.2, sunHeight);',
+    '    vec3 color = mix(night, day, daylight);',
+    '',
+    // twilight: a warm glow low in the sky on the sun's side, while it's near the horizon
+    '    float twilight = smoothstep(-0.3, -0.03, sunHeight) * (1.0 - smoothstep(0.0, 0.25, sunHeight));',
+    '    vec2 flatDir = normalize(dir.xz + vec2(1e-5));',
+    '    vec2 flatSun = normalize(sunDirection.xz + vec2(1e-5));',
+    '    float sunSide = pow((dot(flatDir, flatSun) + 1.0) / 2.0, 3.0);',
+    '    color += twilightGlow * twilight * sunSide * pow(1.0 - height, 4.0);',
+    '',
+    // a touch of noise to stop the dark gradients from banding
+    '    float noise = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);',
+    '    color += (noise - 0.5) / 255.0;',
+    '',
+    '    gl_FragColor = vec4(color, 1.0);',
+    '}'
+].join('\n');
+
+// shader colours are written straight to the screen, so these are given as sRGB (the same as CSS colours)
+function srgbColor(css) {
+    return new THREE.Color().setStyle(css, THREE.SRGBColorSpace).convertLinearToSRGB();
+}
+
 function makeSkyDome() {
-    var geometry = new THREE.SphereGeometry(SKY_RADIUS, 64, 64);
-    var positions = geometry.attributes.position;
-    var colors = new Float32Array(positions.count * 3);
-    var bottom = new THREE.Color(SKY_BOTTOM_COLOR);
-    var top = new THREE.Color(SKY_TOP_COLOR);
-    var color = new THREE.Color();
-
-    for(var i = 0; i < positions.count; i++) {
-        var t = ((positions.getY(i) / SKY_RADIUS) + 1) / 2; // 0 at the bottom pole, 1 at the top
-        color.lerpColors(bottom, top, t);
-        color.toArray(colors, i * 3);
-    }
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    var dome = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
-        vertexColors: true,
+    var material = new THREE.ShaderMaterial({
+        uniforms: {
+            sunDirection: { value: new THREE.Vector3(0, 1, 0) },
+            dayZenith: { value: srgbColor('#1d58c0') },
+            dayHorizon: { value: srgbColor('#b4d0ec') },
+            nightZenith: { value: srgbColor('#010209') },
+            nightHorizon: { value: srgbColor('#0a1024') },
+            twilightGlow: { value: srgbColor('#ff7a33') }
+        },
+        vertexShader: SKY_VERTEX_SHADER,
+        fragmentShader: SKY_FRAGMENT_SHADER,
         side: THREE.BackSide, // draw the inside surface, which is the side we're looking at
         depthWrite: false
-    }));
+    });
+
+    var dome = new THREE.Mesh(new THREE.SphereGeometry(SKY_RADIUS, 64, 64), material);
     dome.renderOrder = -1; // drawn first, behind everything else
     return dome;
 }
 
 var skyDome = makeSkyDome();
 scene.add(skyDome);
+
+// the same day / night measure as the sky shader, for the lights
+function daylightAmount(sunAltitude) {
+    return THREE.MathUtils.smoothstep(Math.sin(THREE.MathUtils.degToRad(sunAltitude)), -0.17, 0.2);
+}
+
+var DAY_AMBIENT = { sky: new THREE.Color('#cfe6ff'), ground: new THREE.Color('#3d6b2a'), intensity: 1.6 };
+var NIGHT_AMBIENT = { sky: new THREE.Color('#5a6a9a'), ground: new THREE.Color('#141c14'), intensity: 0.3 };
+
+// places the sun (degrees: azimuth clockwise from north, altitude above the horizon),
+// updating the sky colours and the lighting to match
+function setSun(azimuth, altitude) {
+    var az = THREE.MathUtils.degToRad(azimuth);
+    var alt = THREE.MathUtils.degToRad(altitude);
+    var direction = new THREE.Vector3(Math.cos(alt) * Math.sin(az), Math.sin(alt), -Math.cos(alt) * Math.cos(az));
+
+    skyDome.material.uniforms.sunDirection.value.copy(direction);
+
+    var daylight = daylightAmount(altitude);
+    ambientLight.color.lerpColors(NIGHT_AMBIENT.sky, DAY_AMBIENT.sky, daylight);
+    ambientLight.groundColor.lerpColors(NIGHT_AMBIENT.ground, DAY_AMBIENT.ground, daylight);
+    ambientLight.intensity = THREE.MathUtils.lerp(NIGHT_AMBIENT.intensity, DAY_AMBIENT.intensity, daylight);
+
+    sunLight.position.copy(direction).multiplyScalar(100);
+    sunLight.intensity = 1.4 * THREE.MathUtils.smoothstep(altitude, -2, 6); // fades out as the sun sets
+}
+
+setSun(DEFAULT_SUN.azimuth, DEFAULT_SUN.altitude);
 
 var ground = new THREE.Mesh(
     new THREE.CircleGeometry(GROUND_RADIUS, 128),
@@ -401,6 +482,10 @@ window.addEventListener('resize', function() {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+// for trying out sun positions from the browser console, e.g. viewer.setSun(250, -4) for a sunset,
+// until the sun is calculated from the observer's time and place
+window.viewer = { setSun: setSun };
 
 initObserverInputs();
 readObserverInputs();
