@@ -20,6 +20,10 @@ var MAX_PITCH = 85; // how far up / down the observer can look, in degrees
 var RESET_HEADING = 180; // the observer starts (and resets to) looking south
 var SKY_RADIUS = 500;
 var MOON_DISTANCE = 400; // inside the sky dome
+var SUMMER_ARC_COLOR = '#ffc94d'; // warm gold
+var WINTER_ARC_COLOR = '#a9c6ff'; // cool silver-blue
+var TODAY_ARC_COLOR = '#ffffff';
+var MARKER_DISTANCE = 300; // horizon markers sit in the sky, inside the moon's distance
 var MOON_SIZE_SCALE = 6; // the real moon (about 0.5 deg across) is drawn this many times larger so it's easy to see
 
 var DIRECTIONS = [
@@ -89,7 +93,25 @@ var SKY_FRAGMENT_SHADER = [
     'uniform vec3 nightZenith;',
     'uniform vec3 nightHorizon;',
     'uniform vec3 twilightGlow;',
+    'uniform float latitude;', // the observer's, in radians
+    'uniform vec3 arcDeclinations;', // degrees: local midsummer, local midwinter, today
+    'uniform float sunHourAngle;', // degrees, 0 at solar noon, negative in the morning
+    'uniform vec3 summerArcColor;',
+    'uniform vec3 winterArcColor;',
+    'uniform vec3 todayArcColor;',
     'varying vec3 vDirection;',
+    '',
+    // how much the atmosphere lifts things near the horizon (degrees), Bennett's formula as in astro.js
+    'float refraction(float altitude) {',
+    '    if(altitude < -1.0) return 0.0;',
+    '    return (1.02 / tan(radians(altitude + (10.3 / (altitude + 5.11))))) / 60.0;',
+    '}',
+    '',
+    // 1 on a line of the given half width (in pixels) where value == target, fading to 0 either side
+    'float line(float value, float target, float degPerPixel, float halfWidth) {',
+    '    float pixels = abs(value - target) / max(degPerPixel, 1e-6);',
+    '    return 1.0 - smoothstep(halfWidth - 0.5, halfWidth + 0.5, pixels);',
+    '}',
     '',
     'void main() {',
     '    vec3 dir = normalize(vDirection);',
@@ -115,6 +137,30 @@ var SKY_FRAGMENT_SHADER = [
     '    float sunSide = pow((dot(flatDir, flatSun) + 1.0) / 2.0, 3.0);',
     '    color += twilightGlow * twilight * sunSide * pow(1.0 - height, 4.0);',
     '',
+    // sun arcs: the sun's daily path at the solstices and today. each is a circle of constant
+    // declination, so find this point's declination and hour angle for the observer's latitude
+    // (taking out the refraction lift first, so the arcs meet the horizon where the sun appears to)
+    '    float apparentAlt = degrees(asin(clamp(dir.y, -1.0, 1.0)));',
+    '    float trueAlt = radians(apparentAlt - refraction(apparentAlt));',
+    '    vec2 compass = length(dir.xz) > 1e-5 ? normalize(dir.xz) : vec2(0.0, -1.0);',
+    '    vec3 trueDir = vec3(compass.x * cos(trueAlt), sin(trueAlt), compass.y * cos(trueAlt));',
+    // (north is -z, east +x) the celestial pole, and the celestial equator where it crosses the meridian
+    '    vec3 pole = vec3(0.0, sin(latitude), -cos(latitude));',
+    '    vec3 equatorSouth = vec3(0.0, cos(latitude), sin(latitude));',
+    '    float declination = degrees(asin(clamp(dot(trueDir, pole), -1.0, 1.0)));',
+    '    float hourAngle = degrees(atan(-trueDir.x, dot(trueDir, equatorSouth)));', // increases westwards
+    '    float degPerPixel = fwidth(declination);',
+    '',
+    '    float aboveHorizon = smoothstep(-0.5, 0.0, apparentAlt);',
+    '    float summerArc = 0.45 * line(declination, arcDeclinations.x, degPerPixel, 0.6);',
+    '    float winterArc = 0.45 * line(declination, arcDeclinations.y, degPerPixel, 0.6);',
+    // today's arc is stronger, and brighter along the part of the path the sun has still to travel
+    '    float ahead = smoothstep(-0.5, 0.5, hourAngle - sunHourAngle);',
+    '    float todayArc = mix(0.5, 0.9, ahead) * line(declination, arcDeclinations.z, degPerPixel, 1.1);',
+    '    color = mix(color, summerArcColor, summerArc * aboveHorizon);',
+    '    color = mix(color, winterArcColor, winterArc * aboveHorizon);',
+    '    color = mix(color, todayArcColor, todayArc * aboveHorizon);',
+    '',
     // a touch of noise to stop the dark gradients from banding
     '    float noise = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);',
     '    color += (noise - 0.5) / 255.0;',
@@ -136,7 +182,13 @@ function makeSkyDome() {
             dayHorizon: { value: srgbColor('#b4d0ec') },
             nightZenith: { value: srgbColor('#010209') },
             nightHorizon: { value: srgbColor('#0a1024') },
-            twilightGlow: { value: srgbColor('#ff7a33') }
+            twilightGlow: { value: srgbColor('#ff7a33') },
+            latitude: { value: 0 },
+            arcDeclinations: { value: new THREE.Vector3() },
+            sunHourAngle: { value: 0 },
+            summerArcColor: { value: srgbColor(SUMMER_ARC_COLOR) },
+            winterArcColor: { value: srgbColor(WINTER_ARC_COLOR) },
+            todayArcColor: { value: srgbColor(TODAY_ARC_COLOR) }
         },
         vertexShader: SKY_VERTEX_SHADER,
         fragmentShader: SKY_FRAGMENT_SHADER,
@@ -242,6 +294,123 @@ var moon = new THREE.Mesh(
 var moonOffset = new THREE.Vector3(); // from the observer to the moon
 scene.add(moon);
 
+// sun arcs and horizon markers
+// the arcs (the sun's path at midsummer, midwinter and today) are drawn by the sky shader.
+// where each arc meets the horizon, a thin tick and a small label mark the sunrise / sunset direction.
+// like the moon, the markers are kept centred on the observer, as they mark directions rather than places
+
+// a small text label for the sky, about heightDeg tall as seen from the observer at MARKER_DISTANCE
+function makeSkyLabel(text, color, heightDeg, opacity) {
+    var fontSize = 44;
+    var canvas = document.createElement('canvas');
+    var context = canvas.getContext('2d');
+    var font = 'bold ' + fontSize + 'px Arial, Helvetica, sans-serif';
+    context.font = font;
+    canvas.width = Math.ceil(context.measureText(text).width) + 16;
+    canvas.height = Math.round(fontSize * 1.5);
+
+    context.font = font; // resizing the canvas resets its context
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.lineWidth = 6;
+    context.lineJoin = 'round'; // sharp (mitred) corners spike out of letters like M and W
+    context.strokeStyle = 'rgba(0, 17, 34, .7)';
+    context.strokeText(text, canvas.width / 2, canvas.height / 2);
+    context.fillStyle = color;
+    context.fillText(text, canvas.width / 2, canvas.height / 2);
+
+    var texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: opacity }));
+    var height = MARKER_DISTANCE * Math.tan(THREE.MathUtils.degToRad(heightDeg));
+    sprite.scale.set(height * canvas.width / canvas.height, height, 1);
+    return sprite;
+}
+
+// a marker facing north (azimuth 0); setMarkerAzimuth turns it to face the right way.
+// labels sit above the direction columns' labels (which reach about 7.5 deg above the horizon)
+function makeHorizonMarker(text, color, labelAltitude, opacity) {
+    var marker = new THREE.Group();
+    var toHeight = function(altitude) { return MARKER_DISTANCE * Math.tan(THREE.MathUtils.degToRad(altitude)); };
+
+    // the tick starts a little below the horizon so it meets the edge of the plain
+    var tick = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, toHeight(-2), -MARKER_DISTANCE),
+            new THREE.Vector3(0, toHeight(labelAltitude - 1.2), -MARKER_DISTANCE)
+        ]),
+        new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: opacity * 0.7 })
+    );
+    marker.add(tick);
+
+    var label = makeSkyLabel(text, color, 2.8, opacity);
+    label.position.set(0, toHeight(labelAltitude), -MARKER_DISTANCE);
+    marker.add(label);
+
+    horizonMarkers.add(marker);
+    return marker;
+}
+
+function setMarkerAzimuth(marker, azimuth) {
+    marker.visible = (azimuth !== null);
+    if(marker.visible) {
+        marker.rotation.y = -THREE.MathUtils.degToRad(azimuth);
+    }
+}
+
+var horizonMarkers = new THREE.Group();
+scene.add(horizonMarkers);
+
+var markers = {
+    summerRise: makeHorizonMarker('Midsummer sunrise', SUMMER_ARC_COLOR, 8, 0.75),
+    summerSet: makeHorizonMarker('Midsummer sunset', SUMMER_ARC_COLOR, 8, 0.75),
+    winterRise: makeHorizonMarker('Midwinter sunrise', WINTER_ARC_COLOR, 8, 0.75),
+    winterSet: makeHorizonMarker('Midwinter sunset', WINTER_ARC_COLOR, 8, 0.75),
+    todayRise: makeHorizonMarker('Sunrise', TODAY_ARC_COLOR, 11, 0.95),
+    todaySet: makeHorizonMarker('Sunset', TODAY_ARC_COLOR, 11, 0.95)
+};
+
+// azimuth (degrees) where a point at the given declination rises, as seen from the given latitude,
+// with the rising azimuth east of north and the setting one mirrored in the west;
+// null if it never rises or never sets there. uses the same horizon as the arcs (lifted by refraction)
+function riseAzimuth(declination, latitude) {
+    var h0 = -atmosphericRefraction(0);
+    var cosA = (Math.sin(THREE.MathUtils.degToRad(declination)) - (Math.sin(THREE.MathUtils.degToRad(latitude)) * Math.sin(THREE.MathUtils.degToRad(h0))))
+             / (Math.cos(THREE.MathUtils.degToRad(latitude)) * Math.cos(THREE.MathUtils.degToRad(h0)));
+    if(!(Math.abs(cosA) <= 1)) {
+        return null;
+    }
+    return THREE.MathUtils.radToDeg(Math.acos(cosA));
+}
+
+function setArcMarkers(riseMarker, setMarker, declination, latitude) {
+    var az = riseAzimuth(declination, latitude);
+    setMarkerAzimuth(riseMarker, az);
+    setMarkerAzimuth(setMarker, az === null ? null : 360 - az);
+}
+
+// updates the arcs and markers for the observer's place and time
+// (trueObliquity, calcSunEquatorial, greenwichSiderealTime and atmosphericRefraction are from astro.js / sun.js)
+function setSunArcs(obs) {
+    // at the solstices the sun's declination is the tilt of the Earth's axis, north or south;
+    // "midsummer" is the local one, so in the southern hemisphere it's the December solstice
+    var tilt = trueObliquity((dateToJD(obs.date) - 2451545.0) / 36525);
+    var summer = obs.lat >= 0 ? tilt : -tilt;
+    var sun = calcSunEquatorial(obs.date);
+
+    // the sun's hour angle: 0 at solar noon, negative before, positive after
+    var hourAngle = (((greenwichSiderealTime(obs.date) + obs.lon - sun.ra) % 360) + 540) % 360 - 180;
+
+    var uniforms = skyDome.material.uniforms;
+    uniforms.latitude.value = THREE.MathUtils.degToRad(obs.lat);
+    uniforms.arcDeclinations.value.set(summer, -summer, sun.dec);
+    uniforms.sunHourAngle.value = hourAngle;
+
+    setArcMarkers(markers.summerRise, markers.summerSet, summer, obs.lat);
+    setArcMarkers(markers.winterRise, markers.winterSet, -summer, obs.lat);
+    setArcMarkers(markers.todayRise, markers.todaySet, sun.dec, obs.lat);
+}
+
 // places the moon (degrees: azimuth clockwise from north, altitude above the horizon, apparent diameter)
 function setMoon(azimuth, altitude, diameter) {
     moonOffset.copy(skyDirection(azimuth, altitude)).multiplyScalar(MOON_DISTANCE);
@@ -268,6 +437,7 @@ function makeLabelSprite(text) {
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.lineWidth = 10;
+    context.lineJoin = 'round'; // sharp (mitred) corners spike out of letters like M and W
     context.strokeStyle = 'rgba(0, 17, 34, .8)';
     context.strokeText(text, 128, 68);
     context.fillStyle = '#ffffff';
@@ -531,6 +701,7 @@ function onObserverChange(obs) {
     var sun = calcSunPosition(obs.date, obs.lat, obs.lon);
     setSun(sun.azimuth, sun.altitude);
     document.getElementById('sunPosition').textContent = formatSkyPosition(sun);
+    setSunArcs(obs);
 
     var moonPos = calcMoonPosition(obs.date, obs.lat, obs.lon);
     setMoon(moonPos.azimuth, moonPos.altitude, moonPos.diameter);
@@ -574,6 +745,7 @@ function animate(time) {
     skyDome.position.copy(camera.position);
     moon.position.copy(camera.position).add(moonOffset);
     moon.lookAt(camera.position); // the moon's disc always faces the observer
+    horizonMarkers.position.copy(camera.position);
 
     renderer.render(scene, camera);
 }
