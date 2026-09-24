@@ -126,6 +126,44 @@
             #markerInfo .note { margin-top: .3rem; opacity: .85; }
             #markerInfo .footer { margin-top: .4rem; font-size: .7rem; opacity: .65; }
 
+            /* the "about this viewer" dialog: shown on first visit, and from the "?" button. as a modal dialog it's in the
+               browser's top layer, above everything on the page (whatever its z-index) and above the location dialog
+               if that's open; the z-index is set as high as it goes all the same */
+            #infoButton {
+                position: fixed; top: 1rem; right: 1rem; z-index: 10;
+                width: 2.1rem; height: 2.1rem; padding: 0; border-radius: 50%;
+                border: 1px solid #9ab; background: rgba(0, 17, 34, .75); color: #fff;
+                font: bold 1.1rem Arial, Helvetica, sans-serif; cursor: pointer;
+            }
+            #infoButton:hover { background: #3a5570; }
+            @media (max-width: 480px) {
+                /* on phones the observer panel takes the whole top, so the button moves to the bottom corner, beside the
+                   navigation pane */
+                #infoButton { top: auto; bottom: 1rem; }
+            }
+            #infoDialog {
+                z-index: 2147483647;
+                width: 34rem; max-width: calc(100vw - 2rem); max-height: calc(100vh - 2rem); box-sizing: border-box;
+                padding: 1rem 1.25rem; border: 1px solid #456; border-radius: 6px; overflow-y: auto;
+                background: #0a1a2a; color: #fff; font-size: .9rem; line-height: 1.45;
+            }
+            #infoDialog::backdrop { background: rgba(0, 8, 16, .6); }
+            #infoDialog h2 { margin: 0 0 .5rem; font-size: 1.15rem; }
+            #infoDialog h3 { margin: .9rem 0 .3rem; font-size: .95rem; }
+            #infoDialog p { margin: 0 0 .5rem; }
+            #infoDialog ul { margin: 0 0 .5rem; padding-left: 1.2rem; }
+            #infoDialog li { margin-bottom: .25rem; }
+            #infoDialog .key { display: grid; grid-template-columns: 1.6rem auto; gap: .2rem .5rem; align-items: center; margin: 0 0 .5rem; }
+            #infoDialog .swatch { width: 1.4rem; height: 0; border-top: 3px solid; }
+            #infoDialog .swatch.dashed { border-top-style: dashed; }
+            #infoDialog .note { font-size: .8rem; opacity: .8; }
+            #infoDialog .buttons { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .9rem; }
+            #infoDialog .buttons button {
+                font: inherit; font-size: .85rem; padding: .35rem .8rem;
+                border: 1px solid #9ab; border-radius: 4px; background: #234; color: #fff; cursor: pointer;
+            }
+            #infoDialog #infoClose { background: #2f5a3a; border-color: #8c9; }
+
             #controls {
                 display: grid; gap: .3rem;
                 grid-template-columns: repeat(3, 3rem); grid-template-rows: repeat(3, 3rem);
@@ -233,6 +271,61 @@
             </form>
         </dialog>
 
+        <button id="infoButton" type="button" aria-label="About this viewer" title="About this viewer">?</button>
+
+        <dialog id="infoDialog" aria-labelledby="infoTitle">
+            <h2 id="infoTitle">The seasonal sky viewer</h2>
+            <p>Stand in a circle of stones and watch the sky the way people who built stone circles did: where the sun
+                and moon rise and set through the year, and the turning points they marked: the solstices and
+                equinoxes, the four fire festivals (Samhain, Imbolc, Bealtaine and Lúnasa) and the moon's long
+                18.6-year cycle of standstills.</p>
+            <p>Everything is worked out for the place and moment you choose: the sun, the moon and its phase, the
+                stars and the Milky Way, and even the colour of the ground through the seasons.</p>
+
+            <h3>The arcs across the sky</h3>
+            <p>Each arc is the path the sun or moon takes across the sky on a particular day; where it meets the
+                horizon, a marker shows the rising or setting point.</p>
+            <div class="key">
+                <span class="swatch" style="border-color: #ffc94d"></span><span>Midsummer (the sun's highest, longest path)</span>
+                <span class="swatch" style="border-color: #a9c6ff"></span><span>Midwinter (its lowest, shortest)</span>
+                <span class="swatch" style="border-color: #d6e4d2"></span><span>The equinoxes (due east to due west)</span>
+                <span class="swatch dashed" style="border-color: #ff8a3d"></span><span>The fire festivals</span>
+                <span class="swatch" style="border-color: #ffffff"></span><span>Today's sun, brighter where it has still to go</span>
+                <span class="swatch" style="border-color: #d9d2ff"></span><span>The moon's path tonight</span>
+                <span class="swatch" style="border-color: #b3a2f0"></span><span>The limits of the moon's range at its major (solid) and minor (dashed) standstills</span>
+            </div>
+            <p><strong>Hover over or tap a marker's label</strong> for the next date of what it marks, the sunrise or
+                sunset time that day, and its compass bearing, so you can find the direction outside with a phone's
+                compass. Tap anywhere else to close it.</p>
+
+            <h3>Looking around</h3>
+            <ul>
+                <li><strong>Turn</strong> with the left / right arrow keys, and <strong>walk</strong> with up / down
+                    (or use the arrows on screen).</li>
+                <li><strong>Look around</strong> by dragging with the right mouse button, or dragging with a finger.</li>
+                <li><strong>Reset</strong> takes you back to the centre of the circle, facing south.</li>
+            </ul>
+
+            <h3>Choosing a place and time</h3>
+            <ul>
+                <li>Set the <strong>latitude and longitude</strong> in the Observer panel, or use
+                    <em>How to get your lat / long easily</em> to copy them from Google Maps. The viewer remembers the
+                    last place.</li>
+                <li>Set the <strong>date and time</strong>. The time zone is worked out from the place (Auto), or
+                    choose one yourself.</li>
+                <li>The <strong>Sun</strong> and <strong>Moon</strong> checkboxes show or hide their arcs, and the
+                    small arrow buttons fold the panels away.</li>
+            </ul>
+            <p class="note">Bearings are from true north, and rise / set times assume a level horizon: hills delay a
+                sunrise and move it a little. The fire festivals are taken as the points halfway between the solstices
+                and equinoxes.</p>
+
+            <div class="buttons">
+                <button id="infoDontShow" type="button">Don't show this again</button>
+                <button id="infoClose" type="button">Got it</button>
+            </div>
+        </dialog>
+
         <div id="markerInfo" role="tooltip" hidden></div>
 
         <div id="hud">
@@ -262,7 +355,7 @@
         <script src="js/stars.js?v=20260924a"></script>
         <script src="js/location.js?v=20260924a"></script>
         <script src="js/lib/tz-lookup/tz.js?v=11.7.0"></script>
-        <script type="module" src="js/viewer.js?v=20260924zz1"></script>
+        <script type="module" src="js/viewer.js?v=20260924zz3"></script>
 
     </body>
 </html>

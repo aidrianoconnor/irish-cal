@@ -1718,7 +1718,7 @@ function updateKeyControls() {
 
 window.addEventListener('keydown', function(e) {
     // (not while the location dialog is open over the view)
-    if(ARROW_KEYS.indexOf(e.key) > -1 && !isTypingTarget(e.target) && !locationDialog.open) {
+    if(ARROW_KEYS.indexOf(e.key) > -1 && !isTypingTarget(e.target) && !locationDialog.open && !infoDialog.open) {
         heldKeys[e.key] = true;
         updateKeyControls();
         e.preventDefault();
@@ -2480,11 +2480,56 @@ renderer.domElement.addEventListener('pointerup', function(e) {
     }
 });
 window.addEventListener('keydown', function(e) {
-    if(e.key == 'Escape' && pinnedMarker && !locationDialog.open) {
+    if(e.key == 'Escape' && pinnedMarker && !locationDialog.open && !infoDialog.open) {
         pinnedMarker = null;
         updateShownMarker();
     }
 });
+
+// the "about this viewer" dialog: shown when the page opens, unless "Don't show this again" was chosen
+// (remembered in local storage), and from the "?" button at any time
+var INFO_HIDDEN_KEY = 'irishcal.viewer.hideInfo';
+var infoDialog = document.getElementById('infoDialog');
+
+function openInfoDialog() {
+    if(!infoDialog.open) {
+        infoDialog.showModal();
+    }
+    // (focused without scrolling down to it, so the dialog opens at the top)
+    document.getElementById('infoClose').focus({ preventScroll: true });
+    infoDialog.scrollTop = 0;
+}
+
+function initInfoDialog() {
+    document.getElementById('infoButton').addEventListener('click', openInfoDialog);
+    document.getElementById('infoClose').addEventListener('click', function() {
+        infoDialog.close();
+    });
+    document.getElementById('infoDontShow').addEventListener('click', function() {
+        try {
+            localStorage.setItem(INFO_HIDDEN_KEY, '1');
+        } catch(e) {
+            // storage unavailable: it will just show again next time
+        }
+        infoDialog.close();
+    });
+    // clicking the dimmed backdrop (outside the dialog's box) closes it too, as for the location dialog
+    infoDialog.addEventListener('click', function(e) {
+        var box = infoDialog.getBoundingClientRect();
+        if(e.target === infoDialog && (e.clientX < box.left || e.clientX > box.right || e.clientY < box.top || e.clientY > box.bottom)) {
+            infoDialog.close();
+        }
+    });
+    var hidden = false;
+    try {
+        hidden = localStorage.getItem(INFO_HIDDEN_KEY) === '1';
+    } catch(e) {
+        // storage unavailable: show it
+    }
+    if(!hidden) {
+        openInfoDialog();
+    }
+}
 
 // render loop
 
@@ -2531,6 +2576,7 @@ window.addEventListener('resize', function() {
 
 initArcToggles();
 initPanelToggles();
+initInfoDialog();
 initObserverInputs();
 readObserverInputs();
 resetView();
