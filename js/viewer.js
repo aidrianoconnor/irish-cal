@@ -1162,6 +1162,10 @@ function colourGround(season) {
         colors.setXYZ(i, c.r, c.g, c.b);
     }
     colors.needsUpdate = true;
+    // the tussocks are the season's grass, leaning to the drier colour
+    if(typeof tussockMaterial !== 'undefined') {
+        tussockMaterial.color.lerpColors(season.lush, season.dry, 0.7);
+    }
 }
 
 // recolours the ground when the season has moved on (by a day or so of the sun's travel), or the hemisphere changed
@@ -1484,6 +1488,82 @@ function scatterRocks() {
 }
 
 var rockCount = scatterRocks();
+
+// tussocks: clumps of grass blades, on the grassier ground (away from the bare earth and stony patches). their
+// colour follows the season's grass (set by colourGround), leaning to the drier grass, as tussocks are tawnier than
+// the grass around them. each blade is two triangles back to back, both lit as if facing up (like the ground they
+// grow from: a double-sided material would light the back faces as if facing down, so half the blades looked black).
+// they catch the stones' shadows,
+// but don't cast their own (thin blades would only speckle the shadow map)
+var TUSSOCK_TRIES = 6000;
+var TUSSOCK_REACH = 50; // metres
+var TUSSOCK_BLADES = 22;
+
+function makeTussockGeometry(seed) {
+    var random = seededRandom(seed);
+    var positions = [], normals = [], colors = [];
+    for(var b = 0; b < TUSSOCK_BLADES; b++) {
+        // each blade a thin triangle from near the clump's middle, leaning outwards, about 1 unit tall
+        var angle = random() * Math.PI * 2, from = 0.12 * random();
+        var lean = 0.2 + (0.45 * random()), height = 0.55 + (0.45 * random()), width = 0.05 + (0.04 * random());
+        var dx = Math.cos(angle), dz = Math.sin(angle);
+        var bx = dx * from, bz = dz * from;
+        var side = { x: -dz * width, z: dx * width };
+        var tip = [bx + (dx * lean * height), height, bz + (dz * lean * height)];
+        positions.push(bx - side.x, 0, bz - side.z, bx + side.x, 0, bz + side.z, tip[0], tip[1], tip[2]);
+        positions.push(bx + side.x, 0, bz + side.z, bx - side.x, 0, bz - side.z, tip[0], tip[1], tip[2]); // (the back)
+        for(var v = 0; v < 6; v++) {
+            normals.push(dx * 0.3, 1, dz * 0.3);
+        }
+        for(var f = 0; f < 2; f++) {
+            colors.push(0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 1.1, 1.1, 1.1); // darker at the base
+        }
+    }
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.normalizeNormals();
+    return geometry;
+}
+
+var tussockMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 });
+
+function scatterTussocks() {
+    var random = seededRandom(5678);
+    var geometries = [makeTussockGeometry(301), makeTussockGeometry(302), makeTussockGeometry(303)];
+    var placed = geometries.map(function() { return []; });
+    for(var t = 0; t < TUSSOCK_TRIES; t++) {
+        var r = TUSSOCK_REACH * Math.sqrt(random()), a = random() * Math.PI * 2;
+        var x = r * Math.cos(a), z = r * Math.sin(a);
+        var mix = groundMix(x, z);
+        var grassy = (1 - THREE.MathUtils.smoothstep(mix.earth, 0.55, 0.7)) * (1 - THREE.MathUtils.smoothstep(mix.stone, 0.6, 0.72));
+        var size = 0.25 + (0.3 * random());
+        if(random() > 0.35 * grassy || !clearOfStones(x, z, 0.2)) {
+            continue;
+        }
+        placed[Math.floor(random() * geometries.length)].push({ x: x, z: z, size: size, turn: random() * Math.PI * 2, tint: 0.85 + (0.25 * random()) });
+    }
+    var matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), color = new THREE.Color();
+    var count = 0;
+    geometries.forEach(function(geometry, g) {
+        var tussocks = placed[g];
+        var mesh = new THREE.InstancedMesh(geometry, tussockMaterial, tussocks.length);
+        tussocks.forEach(function(tussock, i) {
+            rotation.setFromAxisAngle(up, tussock.turn);
+            matrix.compose(new THREE.Vector3(tussock.x, groundHeight(tussock.x, tussock.z) - 0.02, tussock.z), rotation,
+                new THREE.Vector3(tussock.size, tussock.size, tussock.size));
+            mesh.setMatrixAt(i, matrix);
+            mesh.setColorAt(i, color.setScalar(tussock.tint));
+        });
+        mesh.receiveShadow = true;
+        scene.add(mesh);
+        count += tussocks.length;
+    });
+    return count;
+}
+
+var tussockCount = scatterTussocks();
 
 // turning and moving
 
