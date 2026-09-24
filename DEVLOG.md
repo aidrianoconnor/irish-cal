@@ -144,6 +144,10 @@ any calculation
 | ~10:29 | | pushed `2db2c6d`, `f66d0d7` |
 | 10:34 | `daeb503` | TODO: sharable links (place and time in the URL) |
 | 10:42 | `7f514dc` | the eight direction columns replaced by rough standing stones |
+| ~10:44 | | pushed `daeb503` - `52c627d`; collision moved to "maybe later" |
+| 10:50 | `50d06b5` | shadows from the sun; the daytime light leans more on the sun |
+| 10:52 | `f03fa9e` | about a thousand scattered rocks, gathering in the stony patches |
+| 10:54 | `9966a77` | tussocks of grass, in the season's colours |
 
 ### decisions
 
@@ -255,6 +259,19 @@ any calculation
   from 3D noise, a slight lean and twist; set 20 cm into the ground. broad faces towards the centre, as in stone
   circles. cardinal stones ~2.3-2.65 m tall, the others ~1.5-1.85 m. flat shading, vertex colours: grey with
   lichen patches (more higher up) and a darker, damp foot
+- **no collision for now**: walking passes through the stones and rocks, so as more rings are added there's nothing
+  to get stuck on; it's on the TODO list under "maybe later"
+- **shadows**: one directional light's shadow map, 2048 texels over a 130 m square seen from the sun (about 6 cm a
+  texel; 4096 would take 64 MB of graphics memory, a lot for phones), soft (PCF), kept centred on the observer and
+  snapped to whole texels so edges don't shimmer when walking. the stones and rocks cast; the ground, stones, rocks
+  and tussocks receive. the daytime balance moved towards the sun (sun 1.4 -> 2.0, sky light 1.6 -> 1.2), as the
+  shadows were faint; it also brings out the ground's unevenness and the stones' shapes
+- **rocks and tussocks are instanced** (one shape drawn many times: 4 rock shapes, 3 tussock shapes) and placed from
+  fixed seeds (a small repeatable random generator), so the layout is the same every time. rocks: ~1,000 within
+  70 m, kept more often in the ground's stony patches (its stone noise), mostly 10-50 cm with the odd boulder, sunk
+  by a third, darker tints; small ones not placed beyond 50 m. tussocks: clumps of 22 blades within 50 m, on the
+  grassier ground, coloured by `colourGround` from the season's grass (70% of the way to the dry colour). both keep
+  clear of the standing stones and of the Reset point (by 3 m plus three times their size)
 
 ### validation
 
@@ -293,6 +310,10 @@ the test scripts are in this session's scratchpad (`test_location.js`, `test_sta
   for a number of screenshots goes an unpredictable distance (it walked straight through a stone, then far past
   it). for close-up checks, a temporary `window.__debugView` hook (camera, setHeading, setPitch) placed the camera
   directly; removed before committing
+- **double-sided materials light back faces as if facing down**: Three.js flips the normal on a back face, so half
+  the tussock blades looked black. each blade is now two triangles back to back, both with upward normals
+- a boulder landed right by the Reset point, then the fix cleared ~8 m (the stones' margin was tripled for the
+  centre too); the centre and the stones now have separate margins
 - the stones' triangles were first wound the wrong way (facing inwards); worked out by hand before testing
 - **estimated times in the DEVLOG drift**: several rows written from memory were minutes out, and three were 30-55
   minutes out; take them from `git log --date=format:%H:%M` (and `date`) instead

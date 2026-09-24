@@ -23,8 +23,7 @@ ideas for the 3D viewer (viewer.html), roughly in the order we plan to tackle th
 - [x] **more interesting terrain**: the ground out to a level horizon with haze, gentle unevenness (up to ~20 cm, flat at the Reset point and towards the horizon), and colour variation (lush / dry grass, bare earth, stone, fine grain)
 - [x] **the ground's colour following the season**: set at the solstices, equinoxes and fire festivals and blended between them (dull olive with the most bare, wet ground in midwinter, freshest around Bealtaine, drier after Lúnasa, tawny by Samhain), following the observer's hemisphere, and a mild all-year green near the equator
 - [x] **the eight direction columns as rough standing stones**: slabs facing the centre, flared at the base and narrowing to a blunt, sloping top, with lumps, lean, twist and lichen, each from its own fixed seed (the same stones every time)
-- [ ] stop the observer walking through the stones (at the moment there's no collision)
-- [ ] (for the standing stones) small scattered detail (rocks, tussocks) for a sense of scale, and shadows from the sun
+- [x] **scattered detail and shadows**: shadows from the sun (the stones and rocks cast them), about a thousand rocks gathering in the ground's stony patches, and tussocks of grass in the season's colours
 - [ ] **standing stone rings**: turn the 2D rings of the original calendar page (index.html: the solar year, the fire festivals and the lunar month) into rings of standing stones around the observer, with a small floating marker above the stone for where "now" falls in each ring
 
 ## other ideas raised along the way
@@ -37,5 +36,7 @@ ideas for the 3D viewer (viewer.html), roughly in the order we plan to tackle th
 - [ ] a small start script so the viewer can be run offline without a separate server
 
 ## maybe later
+
+- [ ] stop the observer walking through the stones and rocks (no collision for now: it's simpler not to get stuck on things as more rings of stones are added)
 
 - [ ] **hour marks along today's sun arc**, plus a marker where the sun crosses the meridian (solar noon)
