@@ -1956,13 +1956,133 @@ function initObserverInputs() {
     } catch(e) {
         // nothing saved (or 'auto' saved), or storage unavailable: work it out from the location
     }
+    // a shared link's place and time zone take priority over the remembered ones
+    var shared = readSharedView();
+    if(shared.lat !== undefined) {
+        latInput.value = shared.lat;
+        lonInput.value = shared.lon;
+        rememberLocation = false; // (a link's place is for this visit; the observer's own stays remembered)
+    }
+    if(shared.tz !== undefined) {
+        timeZoneChoice = shared.tz;
+    }
     timeZoneInput.value = timeZoneChoice;
 
-    // start at now, in the time zone at the starting location
+    // start at the shared link's moment if it has one, otherwise at now, in the time zone at the starting location
     observer.lat = parseFloat(latInput.value);
     observer.lon = parseFloat(lonInput.value);
     autoTimeZone = lookUpTimeZone(observer.lat, observer.lon);
-    writeDateTimeInputs(new Date());
+    if(shared.date !== undefined) {
+        dateInput.value = shared.date;
+        timeInput.value = shared.time;
+        timeChosen = true;
+    } else {
+        writeDateTimeInputs(new Date());
+    }
+}
+
+// sharable links: the page's address carries the place (lat, lon), and once a date or time has been chosen (or came
+// from a link) the moment too (date, time, and tz: 'auto' or an offset in minutes, so it means the same moment for
+// everyone; Auto works out the same zone for the same place anywhere). until then a bookmark still opens at "now".
+// e.g. viewer.html?lat=53.6947&lon=-6.4755&date=2026-12-21&time=08:45&tz=auto
+var timeChosen = false;
+// whether a change of place is remembered for next time: not for a place that came from a link, until the observer
+// changes it themselves (so opening someone's link doesn't replace their own remembered place)
+var rememberLocation = true;
+
+// the valid values in the page's address: lat and lon (both, or neither), tz, and date and time (both, or neither)
+function readSharedView() {
+    var shared = {};
+    var params;
+    try {
+        params = new URLSearchParams(window.location.search);
+    } catch(e) {
+        return shared;
+    }
+    var lat = parseFloat(params.get('lat')), lon = parseFloat(params.get('lon'));
+    if(Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+        shared.lat = lat;
+        shared.lon = lon;
+    }
+    var tz = params.get('tz');
+    if(tz === TIME_ZONE_AUTO) {
+        shared.tz = TIME_ZONE_AUTO;
+    } else if(tz !== null && TIME_ZONE_OFFSETS.indexOf(parseInt(tz, 10)) > -1) {
+        shared.tz = parseInt(tz, 10);
+    }
+    var date = params.get('date'), time = params.get('time');
+    if(date && time && !isNaN(new Date(date + 'T' + time + ':00Z').getTime()) && date.length == 10 && time.length == 5) {
+        shared.date = date;
+        shared.time = time;
+    }
+    return shared;
+}
+
+// the address for the current place (and moment, if chosen, or if withMoment)
+function sharedViewURL(withMoment) {
+    var params = new URLSearchParams();
+    params.set('lat', roundCoordinate(observer.lat));
+    params.set('lon', roundCoordinate(observer.lon));
+    if(timeChosen || withMoment) {
+        var local = new Date(observer.date.getTime() + (timeZoneOffsetAt(observer.date) * MINUTE)).toISOString();
+        params.set('date', local.slice(0, 10));
+        params.set('time', local.slice(11, 16));
+    }
+    if(timeChosen || withMoment || timeZoneChoice !== TIME_ZONE_AUTO) {
+        params.set('tz', timeZoneChoice);
+    }
+    // (a plain : is fine in an address, and easier to read than %3A)
+    return window.location.pathname + '?' + params.toString().split('%3A').join(':') + window.location.hash;
+}
+
+// keeps the address up to date, a moment after the last change (browsers limit how often it can be changed);
+// replacing it rather than adding to the history, so Back still leaves the page
+var shareTimer = null;
+function updateSharedURL() {
+    clearTimeout(shareTimer);
+    shareTimer = setTimeout(function() {
+        try {
+            history.replaceState(null, '', sharedViewURL(false));
+        } catch(e) {
+            // (e.g. a page opened from a file): the address just doesn't follow
+        }
+    }, 400);
+}
+
+// copies a link with the place and moment, even if no time was chosen
+function copySharedLink() {
+    var url = new URL(sharedViewURL(true), window.location.href).href;
+    var result = document.getElementById('shareResult');
+    var done = function(copied) {
+        result.textContent = copied ? 'Link copied' : 'Couldn\'t copy: the address bar has the link';
+        clearTimeout(copySharedLink.timer);
+        copySharedLink.timer = setTimeout(function() { result.textContent = ''; }, 2500);
+    };
+    history.replaceState(null, '', sharedViewURL(true));
+    // the clipboard API where it's allowed; otherwise the older way, copying from a hidden text box (which works in
+    // more places, e.g. some embedded browsers)
+    var fallback = function() {
+        var box = document.createElement('textarea');
+        box.value = url;
+        box.setAttribute('readonly', '');
+        box.style.position = 'fixed';
+        box.style.opacity = '0';
+        document.body.appendChild(box);
+        box.select();
+        var copied = false;
+        try {
+            copied = document.execCommand('copy');
+        } catch(e) {
+            copied = false;
+        }
+        document.body.removeChild(box);
+        done(copied);
+    };
+    if(navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function() { done(true); }, fallback);
+    } else {
+        fallback();
+    }
 }
 
 function saveLocation() {
@@ -1977,6 +2097,7 @@ function saveLocation() {
 function setLocation(lat, lon) {
     latInput.value = lat;
     lonInput.value = lon;
+    rememberLocation = true; // (the observer chose it)
     readObserverInputs();
 }
 
@@ -2011,8 +2132,9 @@ function readObserverInputs() {
     timeInput.classList.toggle('invalid', !dateValid);
     if(dateValid) observer.date = date;
     updateTimeZoneDisplay();
+    updateSharedURL();
 
-    if(lat !== null || lon !== null) {
+    if((lat !== null || lon !== null) && rememberLocation) {
         saveLocation();
     }
     onObserverChange(observer);
@@ -2092,9 +2214,16 @@ function formatSkyPosition(pos) {
 document.getElementById('observer').addEventListener('input', function(e) {
     // the arc toggles and time zone live in the same panel, but have their own handlers
     if(e.target !== sunArcsToggle && e.target !== moonArcsToggle && e.target !== timeZoneInput) {
+        if(e.target === dateInput || e.target === timeInput) {
+            timeChosen = true; // (so the address carries the moment from now on)
+        }
+        if(e.target === latInput || e.target === lonInput) {
+            rememberLocation = true;
+        }
         readObserverInputs();
     }
 });
+document.getElementById('copyLink').addEventListener('click', copySharedLink);
 // changing the time zone re-writes the date and time in the new zone, so the moment itself doesn't change
 // (e.g. 12:00pm UTC becomes 7:00am in UTC-5)
 timeZoneInput.addEventListener('change', function() {
