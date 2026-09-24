@@ -162,6 +162,8 @@ any calculation
 | 14:34 | `8084257` | sharable links: the place (and the moment, once chosen) in the page's address; opening a link doesn't replace the remembered place; a copy-link button |
 | ~14:40 | | pushed `8084257` - `3b9eede`; the preview server had been stopped by the app again: restarted |
 | 16:16 | `527afec` | a start script: `tools/serve.js` (a tiny Node.js server) with `start.cmd` / `start.sh`; the preview (`.claude/launch.json`, outside the repo) now runs it instead of the old scratchpad copy |
+| ~16:20 | | pushed `527afec`, `f41881a`; start.cmd checked on your side: works |
+| 16:47 | `52cb33d` | rethought the standing stone rings: dropped, as a calendar laid out in stones would read as direction markers in the 3D scene. instead "the horizon as the calendar" in `TODO.md`: moving through time (a dial / slider and play, the 2D rings reborn as the time control), today's rising points standing out, stones at the real alignments, an "upcoming" list, the 2D page as a light entry point. details to be talked through before each is built |
 
 ### decisions
 
@@ -374,6 +376,9 @@ the test scripts are in this session's scratchpad (`test_location.js`, `test_sta
 - **a callback given to each `server.listen()` attempt stays attached after the attempt fails**, so when the next
   port worked, both fired: it printed the busy port's addresses too (and would have opened the browser twice). found
   by running it for 3 s while the preview had 8317; now one `listening` handler reads `server.address().port`
+- **don't run `date` from Node on Windows**: `execSync('date')` runs the Windows `date` command, which *sets* the
+  system date (it prompted, got no input and refused, so nothing changed). use JavaScript's `new Date()`, or git's
+  commit times
 - **`top` is a built-in browser global** (`window.top`, read-only): a test script's `var top = ...` silently kept the
   window object, which looked like a failure in the page. use other names in page scripts
 - opening a modal dialog focuses its first button, scrolling a long dialog to the bottom: focus the chosen button
