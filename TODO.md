@@ -31,6 +31,7 @@ ideas for the 3D viewer (viewer.html), roughly in the order we plan to tackle th
 - [ ] a moon surface texture (the maria), so the moon isn't a plain disc
 - [ ] lunar eclipses (the moon currently looks full during one)
 - [ ] dim the direction labels (N, NE, ...) at night; they're unlit so stay bright white
+- [ ] moonlight: a light from the moon, by its phase and height, so a full moon lights the landscape (and casts faint shadows)
 - [x] a time zone for the observer panel: a dropdown of UTC offsets beside the time (remembered between visits); changing it re-writes the date and time so the moment itself doesn't change, and the rise / set times follow it
 - [x] **work out the time zone from the lat / long**: an "Auto" choice (the default) in the time zone dropdown, using an offline boundary lookup (`@photostructure/tz-lookup`, in `js/lib/tz-lookup`) for the named zone, e.g. Europe/Dublin, and the browser's own rules for its summer time
 - [ ] a small start script so the viewer can be run offline without a separate server

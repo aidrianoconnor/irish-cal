@@ -148,6 +148,7 @@ any calculation
 | 10:50 | `50d06b5` | shadows from the sun; the daytime light leans more on the sun |
 | 10:52 | `f03fa9e` | about a thousand scattered rocks, gathering in the stony patches |
 | 10:54 | `9966a77` | tussocks of grass, in the season's colours |
+| 11:04 | `37609ec` | night: the ground and stones were just black; a stronger, cooler night light and "night sight" around the observer |
 
 ### decisions
 
@@ -272,6 +273,10 @@ any calculation
   by a third, darker tints; small ones not placed beyond 50 m. tussocks: clumps of 22 blades within 50 m, on the
   grassier ground, coloured by `colourGround` from the season's grass (70% of the way to the dry colour). both keep
   clear of the standing stones and of the Reset point (by 3 m plus three times their size)
+- **night sight**: at night the landscape was black. the all-round night light is stronger and cooler (0.3 -> 0.55,
+  bluer), and a dim, cool point light 10 m above the observer (intensity 7, fading to nothing by 45 m, a little past
+  the stones, with a gentle falloff) comes up as the daylight goes, like eyes adjusted to the dark. it follows the
+  observer. no moonlight yet: the moon doesn't light the ground (a possible next step, with moon shadows)
 
 ### validation
 
