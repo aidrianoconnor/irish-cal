@@ -342,6 +342,138 @@ var moon = new THREE.Mesh(
 var moonOffset = new THREE.Vector3(); // from the observer to the moon
 scene.add(moon);
 
+// stars: the Bright Star Catalogue's stars down to magnitude 5.5 (BRIGHT_STARS, from stars.js), about what can be
+// seen from a dark country site. they're fixed on the celestial sphere, which turns as one with the Earth, so a
+// single rotation places them all: precession from J2000 to the date, the sidereal time, then the observer's
+// latitude. like the moon they're kept centred on the observer. they fade in with twilight, brightest first,
+// dim towards the horizon, and the faintest are washed out by a bright moon
+
+var STAR_DISTANCE = 470; // inside the sky dome, behind the moon's path
+
+// a star's colour from its B-V index: its temperature (Ballesteros' formula), then that temperature's colour
+// (an approximation of a blackbody's), mixed halfway to white, as the eye sees star colours only faintly
+function starColor(bv) {
+    var t = 4600 * ((1 / ((0.92 * bv) + 1.7)) + (1 / ((0.92 * bv) + 0.62))) / 100;
+    var r = t <= 66 ? 255 : 329.7 * Math.pow(t - 60, -0.1332);
+    var g = t <= 66 ? (99.47 * Math.log(t)) - 161.12 : 288.12 * Math.pow(t - 60, -0.0755);
+    var b = t >= 66 ? 255 : (t <= 19 ? 0 : (138.52 * Math.log(t - 10)) - 305.04);
+    var clamp = function(c) { return THREE.MathUtils.clamp(c, 0, 255) / 255; };
+    return new THREE.Color().setRGB(0.5 + (clamp(r) / 2), 0.5 + (clamp(g) / 2), 0.5 + (clamp(b) / 2), THREE.SRGBColorSpace);
+}
+
+function makeStars() {
+    var count = BRIGHT_STARS.length / 4;
+    var positions = new Float32Array(count * 3);
+    var magnitudes = new Float32Array(count);
+    var colors = new Float32Array(count * 3);
+    for(var i = 0; i < count; i++) {
+        // J2000 equatorial coordinates: x towards the March equinox, z towards the north celestial pole
+        var ra = THREE.MathUtils.degToRad(BRIGHT_STARS[i * 4] / 100);
+        var dec = THREE.MathUtils.degToRad(BRIGHT_STARS[(i * 4) + 1] / 100);
+        positions[i * 3] = STAR_DISTANCE * Math.cos(dec) * Math.cos(ra);
+        positions[(i * 3) + 1] = STAR_DISTANCE * Math.cos(dec) * Math.sin(ra);
+        positions[(i * 3) + 2] = STAR_DISTANCE * Math.sin(dec);
+        magnitudes[i] = BRIGHT_STARS[(i * 4) + 2] / 100;
+        starColor(BRIGHT_STARS[(i * 4) + 3] / 100).toArray(colors, i * 3);
+    }
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('magnitude', new THREE.BufferAttribute(magnitudes, 1));
+    geometry.setAttribute('starColor', new THREE.BufferAttribute(colors, 3));
+
+    var points = new THREE.Points(geometry, new THREE.ShaderMaterial({
+        uniforms: {
+            limitingMagnitude: { value: -5 }, // the faintest that can be seen at the moment
+            pixelRatio: { value: renderer.getPixelRatio() }
+        },
+        vertexShader: STAR_VERTEX_SHADER,
+        fragmentShader: STAR_FRAGMENT_SHADER,
+        transparent: true,
+        blending: THREE.AdditiveBlending, // starlight adds to the sky behind it
+        depthWrite: false
+    }));
+    points.matrixAutoUpdate = false; // its matrix is the sky's rotation, set by setStars
+    points.frustumCulled = false;
+    points.renderOrder = -0.5; // after the sky dome, before the moon (which passes in front)
+    return points;
+}
+
+var STAR_VERTEX_SHADER = [
+    'attribute float magnitude;',
+    'attribute vec3 starColor;',
+    'uniform float limitingMagnitude;',
+    'uniform float pixelRatio;',
+    'varying vec3 vColor;',
+    'varying float vAlpha;',
+    'void main() {',
+    '    // the stars are centred on the observer, so their direction up is their altitude',
+    '    float sinAltitude = normalize(mat3(modelMatrix) * position).y;',
+    '    // light passes through more air near the horizon: roughly a quarter of a magnitude dimmer per air mass',
+    '    float airMass = min(1.0 / (max(sinAltitude, 0.0) + 0.04), 12.0);',
+    '    float mag = magnitude + (0.25 * (airMass - 1.0));',
+    '    // faint stars fade in over the magnitude above the limit; brighter ones are bigger and brighter',
+    '    float visible = smoothstep(0.0, 1.0, limitingMagnitude - mag) * step(-0.005, sinAltitude);',
+    '    vAlpha = visible * clamp(0.45 + (0.15 * (5.5 - mag)), 0.45, 1.0);',
+    '    vColor = starColor;',
+    '    // (at least a couple of pixels across, or the soft edge leaves too little of the faintest to see)',
+    '    gl_PointSize = (2.2 + (0.6 * max(0.0, 4.5 - mag))) * pixelRatio;',
+    '    gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);',
+    '}'
+].join('\n');
+
+var STAR_FRAGMENT_SHADER = [
+    'varying vec3 vColor;',
+    'varying float vAlpha;',
+    'void main() {',
+    '    // a soft round point',
+    '    float d = length(gl_PointCoord - 0.5) * 2.0;',
+    '    float shape = 1.0 - smoothstep(0.45, 1.0, d);',
+    '    if(vAlpha * shape < 0.004) discard;',
+    '    gl_FragColor = vec4(vColor * vAlpha * shape, 1.0);',
+    '}'
+].join('\n');
+
+var stars = makeStars();
+var starField = new THREE.Group(); // kept centred on the observer
+starField.add(stars);
+scene.add(starField);
+
+// the faintest star that can be seen, from the sun's altitude (degrees): none in daylight, the brightest from
+// about sunset + 6 deg, all of them once it's properly dark (about 15 deg below). a bright moon that's up hides
+// up to a magnitude of the faintest
+var STAR_LIMITS = [[-3, -2], [-6, 1], [-9, 3], [-12, 4.5], [-15, 5.5]];
+function limitingMagnitude(sunAltitude, moonAltitude, moonIllumination) {
+    var limit = STAR_LIMITS[STAR_LIMITS.length - 1][1];
+    for(var i = 0; i < STAR_LIMITS.length; i++) {
+        if(sunAltitude >= STAR_LIMITS[i][0]) {
+            var prev = STAR_LIMITS[i - 1];
+            limit = prev ? THREE.MathUtils.mapLinear(sunAltitude, prev[0], STAR_LIMITS[i][0], prev[1], STAR_LIMITS[i][1]) : STAR_LIMITS[0][1];
+            break;
+        }
+    }
+    return limit - (moonIllumination * THREE.MathUtils.clamp((moonAltitude + 2) / 12, 0, 1));
+}
+
+// turns the stars to the observer's sky: J2000 -> the date's equator and equinox (precessionMatrix, astro.js),
+// then by the local sidereal time to the observer's meridian, then tilted for their latitude, into the scene's
+// axes (x east, y up, z south)
+function setStars(obs, sunAltitude, moonAltitude, moonIllumination) {
+    var p = precessionMatrix(obs.date);
+    var lst = THREE.MathUtils.degToRad(greenwichSiderealTime(obs.date) + obs.lon);
+    var phi = THREE.MathUtils.degToRad(obs.lat);
+    var precession = new THREE.Matrix4().set(p[0], p[1], p[2], 0, p[3], p[4], p[5], 0, p[6], p[7], p[8], 0, 0, 0, 0, 1);
+    var siderealTime = new THREE.Matrix4().makeRotationZ(-lst);
+    var local = new THREE.Matrix4().set(
+        0, 1, 0, 0,
+        Math.cos(phi), 0, Math.sin(phi), 0,
+        Math.sin(phi), 0, -Math.cos(phi), 0,
+        0, 0, 0, 1
+    );
+    stars.matrix.copy(local).multiply(siderealTime).multiply(precession);
+    stars.matrixWorldNeedsUpdate = true;
+    stars.material.uniforms.limitingMagnitude.value = limitingMagnitude(sunAltitude, moonAltitude, moonIllumination);
+}
+
 // sun and moon arcs, and horizon markers
 // the sun's arcs (midsummer, midwinter, the fire festivals, the equinoxes and today) and the limits of
 // the moon's range (its major and minor standstills) are circles of constant declination, drawn by the sky shader.
@@ -1217,6 +1349,7 @@ function onObserverChange(obs) {
     setMoonArcs(obs);
 
     var phase = calcMoonIllumination(obs.date);
+    setStars(obs, sun.altitude, moonPos.altitude, phase.illumination);
     document.getElementById('moonPhase').textContent = phase.name + ' · ' + Math.round(phase.illumination * 100) + '% lit';
     document.getElementById('moonNextPhases').textContent = formatNextPhases(obs.date);
     refreshMarkerInfo(); // (a marker's details depend on the place and time too)
@@ -1690,6 +1823,7 @@ function animate(time) {
     moon.lookAt(camera.position); // the moon's disc always faces the observer
     horizonMarkers.position.copy(camera.position);
     moonPath.position.copy(camera.position);
+    starField.position.copy(camera.position);
 
     renderer.render(scene, camera);
     // (after rendering, so the labels' positions are up to date)

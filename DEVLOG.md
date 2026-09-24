@@ -130,7 +130,9 @@ any calculation
 | 09:15 | `73c969e` | a second line under the moon's phase: "Next Full: Sep 26 \| Next New: Oct 10", whichever comes first shown first, as dates in the chosen time zone (`calcNextMoonPhase` in `moon.js`; checked against USNO's Sep 26 / Oct 10 / Oct 26 2026 phases) |
 | 09:25 | `c57c9df` | a small button at the upper right of the Observer and navigation panes to collapse them: the Observer up to its title, the navigation down to the heading (which still updates, and the arrow keys still work); remembered between visits |
 | 09:30 | | pushed `807c91a` - `c57c9df` |
-| 09:55 | *(next commit)* | details for the horizon markers: hovering over (or tapping) a label shows a floating panel with the next date(s) of its event, the rise / set time that day and the bearing from true north (standstills: what they mark, last / next); `calcSunLongitudeMoment` in `sun.js` for the fire festival dates; `seasons.js` now loaded by the viewer |
+| 09:55 | `5217dc8` | details for the horizon markers: hovering over (or tapping) a label shows a floating panel with the next date(s) of its event, the rise / set time that day and the bearing from true north (standstills: what they mark, last / next); `calcSunLongitudeMoment` in `sun.js` for the fire festival dates; `seasons.js` now loaded by the viewer |
+| 10:00 | | pushed `5217dc8`; talked through how to do the stars (real or fake, and the Milky Way) |
+| 10:35 | *(next commit)* | real stars: the Yale Bright Star Catalogue (5th revised ed., downloaded from CDS, catalogue V/50) trimmed to the 2,887 stars down to magnitude 5.5 (`js/stars.js`, 55 KB); `precessionMatrix` in `astro.js`; drawn as points turned by one rotation, fading with twilight and moonlight, dimmer near the horizon |
 
 ### decisions
 
@@ -185,6 +187,22 @@ any calculation
   path's ends (the moon's centre on the horizon), which differ by a minute or so
 - the standstills have no one date (the moon reaches each limit monthly for a year or so around a standstill), so
   their details say what they mark, with the last / next standstill from `calcNextStandstill`
+- **real stars rather than fake ones**: the stars are fixed on the celestial sphere, which turns as one, so a single
+  rotation (precession from J2000 to the date, the local sidereal time, then the latitude) places them all, using
+  the sidereal time the sun and moon already needed. a fake field would have been barely less work and wouldn't
+  turn properly through a night. no names or constellation lines (not Star Walk)
+- **the Yale Bright Star Catalogue**, 5th revised edition (Hoffleit & Warren 1991, from CDS, catalogue V/50: free to
+  use, with a credit): the 2,887 stars down to magnitude 5.5 (a dark country sky), trimmed to RA / dec (J2000,
+  0.01 deg), magnitude and B-V colour as whole numbers in `js/stars.js` (55 KB). the full catalogue stays out of the
+  repo; the one-off conversion script is in the session's scratchpad
+- **precession is included** after all (it moves the stars ~0.29 deg between 2000 and 2026, and it's one small
+  matrix); proper motion isn't (under 0.02 deg in that time for the fastest of these stars)
+- **drawing**: points, additive, between the sky dome and the moon (render order), at least ~2 px across (smaller
+  points lost too much to the soft edge); size and brightness from magnitude; colour from B-V (temperature, then an
+  approximate blackbody colour, mixed halfway to white)
+- **visibility**: the faintest magnitude that shows follows the sun's altitude (none above -3 deg, the brightest from
+  about -6, all by -15), less up to a magnitude for a bright moon that's up; stars dim near the horizon (about a
+  quarter magnitude per air mass) and aren't drawn below it
 
 ### validation
 
@@ -198,8 +216,9 @@ any calculation
 | next full / new | 26 Sep, 10 Oct, 26 Oct 2026 to the minute of USNO; order swaps after the full moon; dates follow the time zone (the 24 Dec 01:28 UTC full moon is Dec 23 in UTC-5) |
 | collapsing panes | both collapse and expand, remembered after a reload; hidden buttons can't be tabbed to; holding the right arrow still turns the view with the navigation pane collapsed (180 -> 237 deg), and doesn't with the location dialog open; phone width |
 | marker details | Newgrange, from 24 Sep 2026: Midsummer sunrise Jun 21 2027 4:56am, 046° NE (a hand calculation for the latitude gives 46.2°); Midwinter sunrise Dec 21 2026 8:41am, 131° SE; both equinoxes 089° E, spring first (the autumn one was the day before); Samhain Nov 7 / Imbolc Feb 4, 117° ESE; moonrise matches the observer panel's; minor standstill last Oct 2015, next May 2034. hover / click to pin / click elsewhere / Escape; closes when its arcs are switched off; phone width, tapped |
+| stars | catalogue spot checks (Polaris, Sirius, Vega, Betelgeuse, Rigel, Arcturus: positions and colours); `precessionMatrix` reproduces Meeus example 21.b to 0.00"; the sky rotation matches `equatorialToHorizontal` to 1e-13 deg (every 97th star, 4 places, 4 dates); Polaris at the latitude; in the browser, the Plough's stars within a few pixels of their predicted screen positions (Newgrange, 10 Oct 2026 23:00); twilight fade at sun -8 / -13 / -17 deg; fewer stars at full moon |
 
-the test script is in this session's scratchpad (`test_location.js`), not the repo
+the test scripts are in this session's scratchpad (`test_location.js`, `test_stars.js`, `build_stars.js`), not the repo
 
 ### problems hit, and lessons
 

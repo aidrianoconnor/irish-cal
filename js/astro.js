@@ -87,6 +87,26 @@ function equatorialToHorizontal(ra, dec, date, latitude, longitude) {
     return { azimuth: ((azimuth % 360) + 360) % 360, altitude: altitude };
 }
 
+// precession: the slow turning of the Earth's axis (about 50 arcseconds a year) moves the celestial pole and
+// equinox, so star positions given for J2000 need turning to the given date's. from Meeus chapter 21 (rigorous
+// method), as a rotation matrix (row-major, 9 numbers) taking a J2000 unit vector (x towards the equinox,
+// z towards the pole) to the date's
+function precessionMatrix(date) {
+    var T = (dateToJD(date) - 2451545.0) / 36525;
+    var arcsec = Math.PI / (180 * 3600);
+    var zeta = ((2306.2181 * T) + (0.30188 * T * T) + (0.017998 * T * T * T)) * arcsec;
+    var z = ((2306.2181 * T) + (1.09468 * T * T) + (0.018203 * T * T * T)) * arcsec;
+    var theta = ((2004.3109 * T) - (0.42665 * T * T) - (0.041833 * T * T * T)) * arcsec;
+
+    // turn by zeta about the pole, tilt by theta, then turn by z
+    var cz = Math.cos(zeta), sz = Math.sin(zeta), ct = Math.cos(theta), st = Math.sin(theta), cZ = Math.cos(z), sZ = Math.sin(z);
+    return [
+        (cZ * ct * cz) - (sZ * sz), -(cZ * ct * sz) - (sZ * cz), -cZ * st,
+        (sZ * ct * cz) + (cZ * sz), -(sZ * ct * sz) + (cZ * cz), -sZ * st,
+        st * cz, -st * sz, ct
+    ];
+}
+
 // rising and setting
 
 // the local day containing the given moment, as [start, end) in ms: midnight to midnight in local mean solar
