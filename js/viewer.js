@@ -1039,14 +1039,93 @@ function makeGroundGeometry() {
             indices.push(vertex(r, s), vertex(r + 1, s + 1), vertex(r, s + 1));
         }
     }
+    // the fine grain texture repeats every GROUND_GRAIN_SIZE metres, laid flat across the ground
+    var uvs = [];
+    for(var i = 0; i < positions.length; i += 3) {
+        uvs.push(positions[i] / GROUND_GRAIN_SIZE, positions[i + 2] / GROUND_GRAIN_SIZE);
+    }
     var geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(positions.length), 3));
     geometry.setIndex(indices);
     geometry.computeVertexNormals();
     return geometry;
 }
 
-var ground = new THREE.Mesh(makeGroundGeometry(), new THREE.MeshStandardMaterial({ color: '#3f8a34', roughness: 1 }));
+// the ground's colour varies in patches: between a lush and a drier grass, with patches of bare earth and of
+// stone showing through. how much of each there is at each vertex is worked out once (groundMix); the colours
+// themselves (a palette) are applied separately, so they can follow the season
+function groundMix(x, z) {
+    var r = Math.sqrt((x * x) + (z * z));
+    var near = 1 - THREE.MathUtils.smoothstep(r, 25, 50); // (the finest patches fade out where the rings are far apart)
+    var dry = groundNoise(x / 9, z / 9, 4);
+    var earth = THREE.MathUtils.smoothstep((0.5 * groundNoise(x / 3.5, z / 3.5, 5)) + (0.5 * near * groundNoise(x / 1.4, z / 1.4, 6)), 0.68, 0.76);
+    var stone = THREE.MathUtils.smoothstep((0.5 * groundNoise(x / 2.5, z / 2.5, 7)) + (0.5 * near * groundNoise(x / 0.9, z / 0.9, 8)), 0.74, 0.79);
+    // clumps of lighter and darker grass, and the dips a little darker (damper), the rises a little lighter
+    var clumps = 0.9 + (0.2 * THREE.MathUtils.lerp(0.5, groundNoise(x / 1.6, z / 1.6, 9), near));
+    var shade = clumps * (1 + (0.6 * groundHeight(x, z)));
+    return { dry: dry, earth: earth * 0.6, stone: stone * 0.55, shade: shade };
+}
+
+var GROUND_PALETTE = {
+    lush: new THREE.Color('#3f8a34'),
+    dry: new THREE.Color('#6b8f3c'),
+    earth: new THREE.Color('#6e5a3e'),
+    stone: new THREE.Color('#8a857a')
+};
+
+var groundMixes = []; // one for each vertex of the ground
+
+function colourGround(palette) {
+    var colors = ground.geometry.attributes.color;
+    var c = new THREE.Color();
+    for(var i = 0; i < groundMixes.length; i++) {
+        var m = groundMixes[i];
+        c.lerpColors(palette.lush, palette.dry, m.dry).lerp(palette.earth, m.earth).lerp(palette.stone, m.stone).multiplyScalar(m.shade);
+        colors.setXYZ(i, c.r, c.g, c.b);
+    }
+    colors.needsUpdate = true;
+}
+
+// fine grain for the ground up close: a small tile of random light and dark speckles, in two sizes (about 3 and
+// 12 cm, big enough not to average away to a flat grey at a little distance), drawn once on a canvas and multiplied
+// over the ground's colours
+var GROUND_GRAIN_SIZE = 4; // metres
+function makeGrainTexture() {
+    var size = 128;
+    var coarse = [];
+    for(var j = 0; j < (size / 4) * (size / 4); j++) {
+        coarse.push(Math.random());
+    }
+    var canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    var context = canvas.getContext('2d');
+    var image = context.createImageData(size, size);
+    for(var i = 0; i < size * size; i++) {
+        var px = i % size, py = Math.floor(i / size);
+        var speckle = (0.55 * Math.random()) + (0.45 * coarse[(Math.floor(py / 4) * (size / 4)) + Math.floor(px / 4)]);
+        var v = Math.round(255 * (0.7 + (0.3 * speckle)));
+        image.data[i * 4] = image.data[(i * 4) + 1] = image.data[(i * 4) + 2] = v;
+        image.data[(i * 4) + 3] = 255;
+    }
+    context.putImageData(image, 0, 0);
+    var texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.anisotropy = renderer.capabilities.getMaxAnisotropy(); // (stays sharp at low angles)
+    return texture;
+}
+
+var ground = new THREE.Mesh(makeGroundGeometry(), new THREE.MeshStandardMaterial({
+    vertexColors: true, map: makeGrainTexture(), roughness: 1
+}));
+(function() {
+    var positions = ground.geometry.attributes.position;
+    for(var i = 0; i < positions.count; i++) {
+        groundMixes.push(groundMix(positions.getX(i), positions.getZ(i)));
+    }
+})();
+colourGround(GROUND_PALETTE);
 scene.add(ground);
 
 // the haze: the ground fades into the colour of the sky at the horizon with distance, as far-off land does through
