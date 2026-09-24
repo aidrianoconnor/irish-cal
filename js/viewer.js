@@ -325,7 +325,19 @@ function daylightAmount(sunAltitude) {
 }
 
 var DAY_AMBIENT = { sky: new THREE.Color('#cfe6ff'), ground: new THREE.Color('#3d6b2a'), intensity: 1.2 };
-var NIGHT_AMBIENT = { sky: new THREE.Color('#5a6a9a'), ground: new THREE.Color('#141c14'), intensity: 0.3 };
+var NIGHT_AMBIENT = { sky: new THREE.Color('#7385b8'), ground: new THREE.Color('#1c2430'), intensity: 0.55 };
+
+// night sight: eyes adjusted to the dark can still make out the ground and the stones nearby. a dim, cool light
+// from high above the observer, fading out a little beyond the standing stones, that comes up as the daylight
+// goes. it moves with the observer (placeNightSight), so it's the same wherever they stand
+var NIGHT_SIGHT_REACH = 45; // metres: fades to nothing by here
+var NIGHT_SIGHT_HEIGHT = 10;
+var NIGHT_SIGHT_INTENSITY = 7;
+var nightSight = new THREE.PointLight('#a8b8e0', 0, NIGHT_SIGHT_REACH, 1);
+scene.add(nightSight);
+function placeNightSight() {
+    nightSight.position.set(camera.position.x, NIGHT_SIGHT_HEIGHT, camera.position.z);
+}
 
 // places the sun (degrees: azimuth clockwise from north, altitude above the horizon),
 // updating the sky colours and the lighting to match
@@ -338,6 +350,7 @@ function setSun(azimuth, altitude) {
     ambientLight.color.lerpColors(NIGHT_AMBIENT.sky, DAY_AMBIENT.sky, daylight);
     ambientLight.groundColor.lerpColors(NIGHT_AMBIENT.ground, DAY_AMBIENT.ground, daylight);
     ambientLight.intensity = THREE.MathUtils.lerp(NIGHT_AMBIENT.intensity, DAY_AMBIENT.intensity, daylight);
+    nightSight.intensity = NIGHT_SIGHT_INTENSITY * (1 - daylight);
 
     sunDirection.copy(direction);
     placeSunLight();
@@ -2425,6 +2438,7 @@ function animate(time) {
     // the sky is infinitely far away, so it stays centred on the observer as they walk
     skyDome.position.copy(camera.position);
     placeSunLight();
+    placeNightSight();
     moon.position.copy(camera.position).add(moonOffset);
     moon.lookAt(camera.position); // the moon's disc always faces the observer
     horizonMarkers.position.copy(camera.position);
