@@ -150,6 +150,8 @@ any calculation
 | 10:54 | `9966a77` | tussocks of grass, in the season's colours |
 | 11:04 | `37609ec` | night: the ground and stones were just black; a stronger, cooler night light and "night sight" around the observer |
 | 11:08 | `aa8ca2d` | moonlight (by phase and height, with soft shadows), and a brighter base night |
+| ~11:10 | | pushed `50d06b5` - `864f913` |
+| 11:16 | `dbee68b` | the moon's surface: NASA's LRO moon map (1024 x 512, 139 KB, downloaded from NASA SVS, the CGI Moon Kit), turned the right way for the observer; README credits for the viewer's third-party code and data |
 
 ### decisions
 
@@ -284,6 +286,17 @@ any calculation
   base night was also brightened (all-round 0.55 -> 0.75, night sight 7 -> 10)
 - the moon's shadows stay switched on even with no moonlight: switching a light's shadows on / off changes how
   many shadow maps the shaders use, so every material recompiles (a hitch each time the moon rose or set)
+- **the moon's surface is a real map, not drawn**: NASA's CGI Moon Kit (https://svs.gsfc.nasa.gov/4720), the 1k
+  colour map from Lunar Reconnaissance Orbiter data (credit: NASA's Scientific Visualization Studio), in
+  `js/lib/moon` with a CREDIT.txt. the moon is only ~3 deg across on screen, so 1k is plenty (the larger ones are
+  multi-MB TIFFs). drawn maria would only ever look roughly moon-like
+- **the moon's orientation**: the shader turns each point's surface direction into selenographic latitude /
+  longitude against three axes: towards the observer (longitude 0: the near side faces the Earth; libration, a few
+  degrees of wobble, left out), north towards the ecliptic's north pole (the moon's spin axis is within 1.5 deg of
+  it; taken through the stars' J2000-to-scene rotation), and east to the right seen with north up. so the face
+  tilts through the night and month, and is upside down from the southern hemisphere. the map's values are used
+  as they are (sRGB), scaled so its average (~0.62) becomes 1, at 85% strength, over the existing lit / shadowed
+  colours; the shadowed side shows the maria faintly, like earthshine
 
 ### validation
 
@@ -299,6 +312,7 @@ any calculation
 | marker details | Newgrange, from 24 Sep 2026: Midsummer sunrise Jun 21 2027 4:56am, 046° NE (a hand calculation for the latitude gives 46.2°); Midwinter sunrise Dec 21 2026 8:41am, 131° SE; both equinoxes 089° E, spring first (the autumn one was the day before); Samhain Nov 7 / Imbolc Feb 4, 117° ESE; moonrise matches the observer panel's; minor standstill last Oct 2015, next May 2034. hover / click to pin / click elsewhere / Escape; closes when its arcs are switched off; phone width, tapped |
 | stars | catalogue spot checks (Polaris, Sirius, Vega, Betelgeuse, Rigel, Arcturus: positions and colours); `precessionMatrix` reproduces Meeus example 21.b to 0.00"; the sky rotation matches `equatorialToHorizontal` to 1e-13 deg (every 97th star, 4 places, 4 dates); Polaris at the latitude; in the browser, the Plough's stars within a few pixels of their predicted screen positions (Newgrange, 10 Oct 2026 23:00); twilight fade at sun -8 / -13 / -17 deg; fewer stars at full moon |
 | Milky Way | the equatorial -> galactic matrix gives the galactic centre l = 0, b = 0 and the pole b = 90 exactly; Deneb and Sirius match the catalogue's own galactic coordinates; in the browser (Newgrange, 10 Oct 2026 23:00) the band rises at about 245 deg in the WSW (predicted 245-248, Aquila) with the rift splitting it, and comes down fainter at about 64 deg ENE (predicted 58-62, Perseus / Auriga) |
+| moon surface | the map's landmarks where they should be (Tycho ~11 W 44 S, Crisium ~59 E 18 N); full moon from Newgrange (Imbrium upper left, Crisium right, Tycho below), a waxing crescent showing Crisium in its sliver, a gibbous moon; from Sydney upside down (Tycho at the top) |
 | seasonal ground | Newgrange at 1pm on 21 Dec, 5 May, 21 Jun, 20 Aug, 7 Nov: dull grey-green with more bare ground / most vivid / rich green / drier olive-yellow / tawny; Sydney on 21 Jun looks like midwinter; Singapore a mild green |
 
 the test scripts are in this session's scratchpad (`test_location.js`, `test_stars.js`, `build_stars.js`), not the repo

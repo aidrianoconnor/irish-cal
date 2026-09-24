@@ -28,7 +28,7 @@ ideas for the 3D viewer (viewer.html), roughly in the order we plan to tackle th
 
 ## other ideas raised along the way
 
-- [ ] a moon surface texture (the maria), so the moon isn't a plain disc
+- [x] a moon surface texture (the maria), so the moon isn't a plain disc: NASA's LRO moon map, turned the right way for the observer
 - [ ] lunar eclipses (the moon currently looks full during one)
 - [ ] dim the direction labels (N, NE, ...) at night; they're unlit so stay bright white
 - [x] moonlight: a light from the moon, by its phase and height, so a full moon lights the landscape (with soft moon shadows)
