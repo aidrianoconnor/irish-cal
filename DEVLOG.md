@@ -154,7 +154,9 @@ any calculation
 | 11:16 | `dbee68b` | the moon's surface: NASA's LRO moon map (1024 x 512, 139 KB, downloaded from NASA SVS, the CGI Moon Kit), turned the right way for the observer; README credits for the viewer's third-party code and data |
 | ~11:25 | | checked the moon's tilt (it looked ~45 deg clockwise) against JPL Horizons: right to within 1.5 deg in 7 cases; the face really does tilt, e.g. ~58 deg clockwise for a full moon setting in the west from Ireland. no change |
 | ~11:30 | | pushed `dbee68b`, `c8aa443` |
-| 11:46 | *(next commit)* | reviewed the 2D calendar (index.html); the 22 findings are in `2D-REVIEW.md`, kept out of `TODO.md` (which is for the 3D viewer) for sessions on the 2D view |
+| 11:46 | `1748935` | reviewed the 2D calendar (index.html); the 22 findings are in `2D-REVIEW.md`, kept out of `TODO.md` (which is for the 3D viewer) for sessions on the 2D view |
+| ~11:48 | | pushed `1748935` |
+| 11:55 | `a8f04b6` | an "about this viewer" dialog on page load (with "Don't show this again") and a ? button to reopen it |
 
 ### decisions
 
@@ -209,6 +211,12 @@ any calculation
   path's ends (the moon's centre on the horizon), which differ by a minute or so
 - the standstills have no one date (the moon reaches each limit monthly for a year or so around a standstill), so
   their details say what they mark, with the last / next standstill from `calcNextStandstill`
+- **the about dialog is a native modal `<dialog>`**, so it's in the browser's top layer: above every element whatever
+  its z-index, and above the location dialog if both are open (the most recently opened modal is on top). its
+  z-index is set to the maximum anyway, as asked. shown on page load unless "Don't show this again" was chosen
+  (`irishcal.viewer.hideInfo` in local storage); "Got it", Escape or the backdrop just close it. the ? button is at
+  the upper right, but on phones (under 480 px) the observer panel fills the top and the ? landed on its collapse
+  button, so there it moves to the bottom right corner, beside the navigation pane
 - **real stars rather than fake ones**: the stars are fixed on the celestial sphere, which turns as one, so a single
   rotation (precession from J2000 to the date, the local sidereal time, then the latitude) places them all, using
   the sidereal time the sun and moon already needed. a fake field would have been barely less work and wouldn't
@@ -340,6 +348,10 @@ the test scripts are in this session's scratchpad (`test_location.js`, `test_sta
   for a number of screenshots goes an unpredictable distance (it walked straight through a stone, then far past
   it). for close-up checks, a temporary `window.__debugView` hook (camera, setHeading, setPitch) placed the camera
   directly; removed before committing
+- **`top` is a built-in browser global** (`window.top`, read-only): a test script's `var top = ...` silently kept the
+  window object, which looked like a failure in the page. use other names in page scripts
+- opening a modal dialog focuses its first button, scrolling a long dialog to the bottom: focus the chosen button
+  with `{ preventScroll: true }` and set `scrollTop = 0`
 - **double-sided materials light back faces as if facing down**: Three.js flips the normal on a back face, so half
   the tussock blades looked black. each blade is now two triangles back to back, both with upward normals
 - a boulder landed right by the Reset point, then the fix cleared ~8 m (the stones' margin was tripled for the

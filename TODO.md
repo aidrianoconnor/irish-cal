@@ -35,6 +35,7 @@ ideas for the 3D viewer (viewer.html), roughly in the order we plan to tackle th
 - [x] a time zone for the observer panel: a dropdown of UTC offsets beside the time (remembered between visits); changing it re-writes the date and time so the moment itself doesn't change, and the rise / set times follow it
 - [x] **work out the time zone from the lat / long**: an "Auto" choice (the default) in the time zone dropdown, using an offline boundary lookup (`@photostructure/tz-lookup`, in `js/lib/tz-lookup`) for the named zone, e.g. Europe/Dublin, and the browser's own rules for its summer time
 - [ ] a small start script so the viewer can be run offline without a separate server
+- [x] an "about this viewer" dialog on page load ("Don't show this again" remembered), with a ? button to reopen it
 
 ## maybe later
 
