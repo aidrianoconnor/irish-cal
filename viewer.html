@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en-US">
+    <head>
+        <title>irish seasonal sky viewer</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="description" content="A 3D view of the horizon from a given place and time, for watching the sun and moon the way a stone circle would"/>
+
+        <style type="text/css">
+            html, body { margin: 0; height: 100%; overflow: hidden; }
+            body { font-family: Arial, Helvetica, sans-serif; background: #012; color: #fff; }
+            #scene { position: fixed; inset: 0; }
+            #scene canvas { display: block; touch-action: none; }
+
+            #observer {
+                position: fixed; top: 1rem; left: 1rem;
+                max-width: calc(100vw - 2rem); box-sizing: border-box;
+                padding: .75rem 1rem; border-radius: 6px;
+                background: rgba(0, 17, 34, .75);
+            }
+            #observer .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+            #observer .title { margin: 0; font-weight: bold; }
+            #observer .collapsible-inner > .fields { padding-top: .5rem; }
+            #observer .fields { display: grid; grid-template-columns: auto auto; gap: .4rem .75rem; align-items: center; }
+            #observer label, #observer .label { font-size: .85rem; }
+            #observer .readout { font-size: .85rem; max-width: 15rem; }
+            #observer input { font: inherit; font-size: .9rem; width: 9.5rem; padding: .15rem .3rem; box-sizing: border-box; }
+            #observer input.invalid { outline: 2px solid #f55; }
+            #observer .time-row { display: flex; gap: .4rem; align-items: center; }
+            #observer .time-row input { width: 7.25rem; } /* (narrower, to leave room for the time zone) */
+            #observer select { font: inherit; font-size: .9rem; padding: .1rem .2rem; }
+            #observer #timeZoneNote { grid-column: 1 / -1; justify-self: end; margin-top: -.15rem; font-size: .8rem; opacity: .75; }
+            #observer #timeZoneNote[hidden] { display: none; }
+            @media (max-width: 400px) {
+                /* a little tighter on phones, to fit the longest time zones, e.g. "Auto (UTC+13:45)" */
+                #observer { padding: .75rem; }
+                #observer .fields { column-gap: .5rem; }
+                #observer .time-row input { width: 6.75rem; }
+            }
+            #observer .toggles { display: flex; gap: 1rem; font-size: .85rem; }
+            #observer .toggles label { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
+            #observer .toggles input { width: auto; margin: 0; }
+            #observer #findLocation { grid-column: 1 / -1; justify-self: end; margin-top: -.15rem; }
+            #observer .share-row { grid-column: 1 / -1; display: flex; justify-content: flex-end; align-items: baseline; gap: .6rem; margin-top: .1rem; }
+            #observer .share-result { font-size: .8rem; color: #9e9; }
+
+            button.link {
+                font: inherit; font-size: .8rem; padding: 0;
+                border: none; background: none; color: #9cd; text-decoration: underline; cursor: pointer;
+            }
+            button.link:hover { color: #cef; }
+
+            #locationDialog {
+                width: 28rem; max-width: calc(100vw - 2rem); box-sizing: border-box;
+                padding: 1rem 1.25rem; border: 1px solid #456; border-radius: 6px;
+                background: #0a1a2a; color: #fff; font-size: .9rem; line-height: 1.4;
+            }
+            #locationDialog::backdrop { background: rgba(0, 8, 16, .55); }
+            #locationDialog .title { margin: 0 0 .5rem; font-weight: bold; font-size: 1rem; }
+            #locationDialog ol { margin: 0 0 .5rem; padding-left: 1.25rem; }
+            #locationDialog li { margin-bottom: .35rem; }
+            #locationDialog a { color: #9cd; }
+            #locationDialog .note { margin: 0 0 .75rem; font-size: .8rem; opacity: .8; }
+            #locationDialog label { display: block; margin-bottom: .25rem; font-size: .85rem; }
+            #locationPaste { font: inherit; width: 100%; padding: .3rem .4rem; box-sizing: border-box; }
+            #locationDialog .tz-note { margin: .3rem 0 0; font-size: .8rem; opacity: .8; }
+            #locationDialog .result { min-height: 2.6em; margin: .4rem 0 .6rem; font-size: .85rem; }
+            #locationDialog .result.found { color: #9e9; }
+            #locationDialog .result.error { color: #fb9; }
+            #locationDialog .buttons { display: flex; align-items: center; gap: .5rem; }
+            #locationDialog .spacer { flex: 1; }
+            #locationDialog .buttons button:not(.link) {
+                font: inherit; font-size: .85rem; padding: .3rem .75rem;
+                border: 1px solid #9ab; border-radius: 4px; background: #234; color: #fff; cursor: pointer;
+            }
+            #locationDialog .buttons button:disabled { opacity: .45; cursor: default; }
+            #locationApply:not(:disabled) { background: #2f5a3a; border-color: #8c9; }
+
+            #hud {
+                position: fixed; left: 50%; bottom: 1rem; transform: translateX(-50%);
+                display: flex; flex-direction: column; align-items: center;
+                padding: .5rem 2.1rem .75rem; border-radius: 6px; /* (room either side for the toggle, keeping it centred) */
+                background: rgba(0, 17, 34, .75);
+                user-select: none; -webkit-user-select: none;
+            }
+            #heading { min-width: 11rem; text-align: center; }
+            #heading .deg { font-size: 1.2rem; font-weight: bold; }
+            #hud .collapsible-inner { display: flex; flex-direction: column; align-items: center; gap: .5rem; }
+            #hud .hint { font-size: .75rem; opacity: .75; }
+            #hud .touch-hint { display: none; }
+            @media (hover: none) and (pointer: coarse) {
+                #hud .mouse-hint { display: none; }
+                #hud .touch-hint { display: block; }
+            }
+            #hud.collapsed { padding-bottom: .5rem; }
+            #hudToggle { position: absolute; top: .45rem; right: .45rem; }
+
+            /* the observer and navigation panes collapse to their title / heading: the body's grid row shrinks
+               from its full height (1fr) to nothing (0fr), which can be animated, then it's hidden so its
+               fields and buttons can't be tabbed to */
+            .collapsible { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .2s ease; }
+            .collapsed .collapsible { grid-template-rows: 0fr; }
+            .collapsible-inner { min-height: 0; overflow: hidden; padding: 2px; margin: -2px; } /* (room for outlines) */
+            .collapsed .collapsible-inner { visibility: hidden; transition: visibility 0s .2s; }
+            @media (prefers-reduced-motion: reduce) {
+                .collapsible, .collapsed .collapsible-inner { transition: none; }
+            }
+            .panel-toggle {
+                width: 1.5rem; height: 1.5rem; padding: 0; flex: none;
+                font: inherit; font-size: .65rem; line-height: 1;
+                border: 1px solid #9ab; border-radius: 4px; background: #234; color: #fff; cursor: pointer;
+            }
+            .panel-toggle:hover { background: #3a5570; }
+
+            /* a horizon marker's details, floating beside its label (placed by viewer.js); it ignores the pointer, so
+               hovering stays with the label underneath */
+            #markerInfo {
+                position: fixed; left: 0; top: 0; box-sizing: border-box;
+                width: max-content; max-width: min(17rem, calc(100vw - 16px));
+                padding: .45rem .65rem .5rem; border-radius: 6px;
+                border: 1px solid rgba(154, 170, 187, .45); border-left: 3px solid var(--accent, #fff);
+                background: rgba(0, 17, 34, .9); color: #fff;
+                font-size: .8rem; line-height: 1.35; pointer-events: none;
+            }
+            #markerInfo[hidden] { display: none; }
+            #markerInfo .title { font-weight: bold; font-size: .85rem; color: var(--accent, #fff); margin-bottom: .2rem; }
+            #markerInfo .row-heading { font-weight: bold; margin-top: .25rem; }
+            #markerInfo .note { margin-top: .3rem; opacity: .85; }
+            #markerInfo .footer { margin-top: .4rem; font-size: .7rem; opacity: .65; }
+
+            /* the "about this viewer" dialog: shown on first visit, and from the "?" button. as a modal dialog it's in the
+               browser's top layer, above everything on the page (whatever its z-index) and above the location dialog
+               if that's open; the z-index is set as high as it goes all the same */
+            #infoButton {
+                position: fixed; top: 1rem; right: 1rem; z-index: 10;
+                width: 2.1rem; height: 2.1rem; padding: 0; border-radius: 50%;
+                border: 1px solid #9ab; background: rgba(0, 17, 34, .75); color: #fff;
+                font: bold 1.1rem Arial, Helvetica, sans-serif; cursor: pointer;
+            }
+            #infoButton:hover { background: #3a5570; }
+            @media (max-width: 480px) {
+                /* on phones the observer panel takes the whole top, so the button moves to the bottom corner, beside the
+                   navigation pane */
+                #infoButton { top: auto; bottom: 1rem; }
+            }
+            #infoDialog {
+                z-index: 2147483647;
+                width: 34rem; max-width: calc(100vw - 2rem); max-height: calc(100vh - 2rem); box-sizing: border-box;
+                padding: 1rem 1.25rem; border: 1px solid #456; border-radius: 6px; overflow-y: auto;
+                background: #0a1a2a; color: #fff; font-size: .9rem; line-height: 1.45;
+            }
+            #infoDialog::backdrop { background: rgba(0, 8, 16, .6); }
+            #infoDialog h2 { margin: 0 0 .5rem; font-size: 1.15rem; }
+            #infoDialog h3 { margin: .9rem 0 .3rem; font-size: .95rem; }
+            #infoDialog p { margin: 0 0 .5rem; }
+            #infoDialog ul { margin: 0 0 .5rem; padding-left: 1.2rem; }
+            #infoDialog li { margin-bottom: .25rem; }
+            #infoDialog .note { font-size: .8rem; opacity: .8; }
+            #infoDialog .buttons { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .9rem; }
+            #infoDialog .buttons button {
+                font: inherit; font-size: .85rem; padding: .35rem .8rem;
+                border: 1px solid #9ab; border-radius: 4px; background: #234; color: #fff; cursor: pointer;
+            }
+            #infoDialog #infoClose { background: #2f5a3a; border-color: #8c9; }
+
+            #controls {
+                display: grid; gap: .3rem;
+                grid-template-columns: repeat(3, 3rem); grid-template-rows: repeat(3, 3rem);
+                grid-template-areas: ". up ." "left reset right" ". down .";
+            }
+            #controls button {
+                font: inherit; font-size: 1.1rem;
+                border: 1px solid #9ab; border-radius: 4px; background: #234; color: #fff;
+                touch-action: none;
+            }
+            #controls button:active { background: #3a5570; }
+            #moveForward { grid-area: up; }
+            #turnLeft { grid-area: left; }
+            #controls #reset { grid-area: reset; font-size: .7rem; }
+            #turnRight { grid-area: right; }
+            #moveBack { grid-area: down; }
+        </style>
+
+        <!-- Three.js (r186) and the add-ons used (lines) are loaded from js/lib/three. to load them from the CDN instead,
+             uncomment this block and comment out the local import map below
+             (import maps are JSON, which doesn't allow comments inside it, and only one can be active)
+        <script type="importmap">
+            {
+                "imports": {
+                    "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+                    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
+                }
+            }
+        </script>
+        -->
+        <script type="importmap">
+            {
+                "imports": {
+                    "three": "./js/lib/three/three.module.js",
+                    "three/addons/": "./js/lib/three/addons/"
+                }
+            }
+        </script>
+    </head>
+    <body>
+
+        <div id="scene"></div>
+
+        <form id="observer" autocomplete="off">
+            <div class="panel-header">
+                <p class="title">Observer</p>
+                <button id="observerToggle" class="panel-toggle" type="button" aria-controls="observerBody"></button>
+            </div>
+            <div id="observerBody" class="collapsible">
+                <div class="collapsible-inner">
+                    <div class="fields">
+                        <label for="lat">Latitude</label>
+                        <input id="lat" type="number" step="any" min="-90" max="90" value="53.6947">
+                        <label for="lon">Longitude</label>
+                        <input id="lon" type="number" step="any" min="-180" max="180" value="-6.4755">
+                        <button id="findLocation" class="link" type="button">How to get your lat / long easily</button>
+                        <label for="date">Date</label>
+                        <input id="date" type="date">
+                        <label for="time">Time</label>
+                        <span class="time-row">
+                            <input id="time" type="time">
+                            <select id="timeZone" aria-label="Time zone"></select>
+                        </span>
+                        <span id="timeZoneNote" class="note"></span>
+                        <span class="label">Sun</span>
+                        <span id="sunPosition" class="readout"></span>
+                        <span class="label">Moon</span>
+                        <span id="moonPosition" class="readout"></span>
+                        <span class="label">Phase</span>
+                        <span class="readout"><span id="moonPhase"></span><br><span id="moonNextPhases"></span></span>
+                        <span class="label">Arcs</span>
+                        <span class="toggles">
+                            <label><input id="showSunArcs" type="checkbox" checked> Sun</label>
+                            <label><input id="showMoonArcs" type="checkbox" checked> Moon</label>
+                        </span>
+                        <span class="share-row">
+                            <span id="shareResult" class="share-result" aria-live="polite"></span>
+                            <button id="copyLink" class="link" type="button">Copy a link to this place and time</button>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </form>
+
+        <dialog id="locationDialog" aria-labelledby="locationTitle">
+            <form id="locationForm" autocomplete="off">
+                <p id="locationTitle" class="title">Set the location from Google Maps</p>
+                <ol>
+                    <li>Open <a id="mapsLink" href="https://www.google.com/maps" target="_blank" rel="noopener">Google Maps</a>
+                        and find the spot you want to stand on.</li>
+                    <li><strong>On a computer:</strong> right-click the spot. The first line of the menu is its
+                        latitude and longitude; click it to copy them.<br>
+                        <strong>On a phone:</strong> press and hold the spot to drop a pin, then copy the
+                        coordinates shown for the pin.</li>
+                    <li>Paste them below. The full link from the address bar works too, once a pin is dropped.</li>
+                </ol>
+                <p class="note">Links from the Share button (maps.app.goo.gl/...) can't be read from here, so copy
+                    the coordinates instead.</p>
+                <label for="locationPaste">Coordinates or Google Maps link</label>
+                <input id="locationPaste" type="text" placeholder="e.g. 53.6947, -6.4755" spellcheck="false">
+                <p id="locationTimeZoneNote" class="tz-note"></p>
+                <p id="locationResult" class="result" aria-live="polite"></p>
+                <div class="buttons">
+                    <button id="locationDefault" class="link" type="button">Back to Newgrange</button>
+                    <span class="spacer"></span>
+                    <button id="locationCancel" type="button">Cancel</button>
+                    <button id="locationApply" type="submit" disabled>Use this location</button>
+                </div>
+            </form>
+        </dialog>
+
+        <button id="infoButton" type="button" aria-label="About this viewer" title="About this viewer">?</button>
+
+        <dialog id="infoDialog" aria-labelledby="infoTitle">
+            <h2 id="infoTitle">The seasonal sky viewer</h2>
+            <p>Stand in a circle of stones and watch the sky the way people who built stone circles did: where the sun
+                and moon rise and set through the year, and the turning points they marked: the solstices and
+                equinoxes, the four fire festivals (Samhain, Imbolc, Bealtaine and Lúnasa) and the moon's long
+                18.6-year cycle of standstills.</p>
+            <p>Everything is worked out for the place and moment you choose: the sun, the moon and its phase, the
+                stars and the Milky Way, and even the colour of the ground through the seasons.</p>
+
+            <h3>The arcs across the sky</h3>
+            <p>Each arc is the path the sun or moon takes across the sky on a particular day; where it meets the
+                horizon, a marker shows the rising or setting point.</p>
+            <p><strong>Hover over or tap a marker's label</strong> for the next date of what it marks, the sunrise or
+                sunset time that day, and its compass bearing, so you can find the direction outside with a phone's
+                compass. Tap anywhere else to close it.</p>
+
+            <h3>Looking around</h3>
+            <ul>
+                <li><strong>Turn</strong> with the left / right arrow keys, and <strong>walk</strong> with up / down
+                    (or use the arrows on screen).</li>
+                <li><strong>Look around</strong> by dragging with the right mouse button, or dragging with a finger.</li>
+                <li><strong>Reset</strong> takes you back to the centre of the circle, facing south.</li>
+            </ul>
+
+            <h3>Choosing a place and time</h3>
+            <ul>
+                <li>Set the <strong>latitude and longitude</strong> in the Observer panel, or use
+                    <em>How to get your lat / long easily</em> to copy them from Google Maps. The viewer remembers the
+                    last place.</li>
+                <li>Set the <strong>date and time</strong>. The time zone is worked out from the place (Auto), or
+                    choose one yourself.</li>
+                <li>The <strong>Sun</strong> and <strong>Moon</strong> checkboxes show or hide their arcs, and the
+                    small arrow buttons fold the panels away.</li>
+                <li>The page's address follows the place (and the date and time, once you set them), so it can be
+                    bookmarked or shared; <em>Copy a link to this place and time</em> copies one that opens the viewer at
+                    the same place and moment.</li>
+            </ul>
+            <p class="note">Bearings are from true north, and rise / set times assume a level horizon: hills delay a
+                sunrise and move it a little. The fire festivals are taken as the points halfway between the solstices
+                and equinoxes, as opposed to their traditional 1st day of the Gregorian calendar month. You can always
+                update the Observer dates to the 1st of the month to see the Sun and Moon locations for the traditional
+                Fire Festival dates.</p>
+
+            <div class="buttons">
+                <button id="infoDontShow" type="button">Don't show this again</button>
+                <button id="infoClose" type="button">Got it</button>
+            </div>
+        </dialog>
+
+        <div id="markerInfo" role="tooltip" hidden></div>
+
+        <div id="hud">
+            <button id="hudToggle" class="panel-toggle" type="button" aria-controls="hudBody"></button>
+            <div id="heading">
+                <div class="deg"></div>
+            </div>
+            <div id="hudBody" class="collapsible">
+                <div class="collapsible-inner">
+                    <div class="hint mouse-hint">&larr; &rarr; turn &middot; &uarr; &darr; move &middot; right-drag to look</div>
+                    <div class="hint touch-hint">drag the view to look around</div>
+                    <div id="controls">
+                        <button id="moveForward" type="button" aria-label="Move forward">&#9650;</button>
+                        <button id="turnLeft" type="button" aria-label="Turn left">&#9664;</button>
+                        <button id="reset" type="button" aria-label="Reset to the centre, facing south">Reset</button>
+                        <button id="turnRight" type="button" aria-label="Turn right">&#9654;</button>
+                        <button id="moveBack" type="button" aria-label="Move back">&#9660;</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script src="js/astro.js?v=20260924d"></script>
+        <script src="js/sun.js?v=20260924e"></script>
+        <script src="js/moon.js?v=20260924e"></script>
+        <script src="js/seasons.js?v=20260924a"></script>
+        <script src="js/stars.js?v=20260924a"></script>
+        <script src="js/location.js?v=20260924a"></script>
+        <script src="js/lib/tz-lookup/tz.js?v=11.7.0"></script>
+        <script type="module" src="js/viewer.js?v=20260924zz6"></script>
+
+    </body>
+</html>

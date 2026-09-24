@@ -321,11 +321,15 @@ var RESIZETIMER;
 
 function appInit() {
 
+    var today = new Date();
+
+    seasonsData.data = calcSeasonData(today);
+    fireFestivalsData.data = calcFireFestivalData(today);
+    moonData.data = calcMoonPhaseData(today);
+
     prepCalData(seasonsData);
     prepCalData(fireFestivalsData);
     prepCalData(moonData);
-
-    var today = new Date();
 
     // gets the data ready
     processCalendarType(fireFestivalsData, 'Fire Festival', today);
