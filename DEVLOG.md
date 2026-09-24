@@ -122,19 +122,23 @@ any calculation
 | time | commit | action |
 |---|---|---|
 | ~08:05 | | reviewed `DEVLOG.md` and `TODO.md` to pick up from the last session |
-| 08:30 | `ac6f1b7` | (feature/002-3d_viewer) "how to get your lat / long easily" dialog: paste coordinates or a Google Maps link to set the location (`js/location.js`); the last location is remembered in local storage, with "Back to Newgrange" to return to the default |
+| 08:31 | `ac6f1b7` | (feature/002-3d_viewer) "how to get your lat / long easily" dialog: paste coordinates or a Google Maps link to set the location (`js/location.js`); the last location is remembered in local storage, with "Back to Newgrange" to return to the default |
 | 08:33 | | pushed `ac6f1b7` and the DEVLOG commit; paused |
 | 08:43 | `807c91a` | time zone dropdown beside the observer's time (fixed UTC offsets, remembered); changing it converts the date / time so the moment stays the same; rise / set times follow it; "Time (UTC)" is now just "Time" |
-| 09:00 | `ee457c6` | "Auto" time zone, worked out from the lat / long with `@photostructure/tz-lookup` 11.7.0 (downloaded from npm, CC0, into `js/lib/tz-lookup`), with summer time from the browser's own time zone rules; the default |
-| 09:10 | `f7dbb0c` | a note under the paste field in the location dialog: on Auto, that the time zone will follow the new location and is worth checking; on a fixed offset, that it won't change |
-| 09:15 | `73c969e` | a second line under the moon's phase: "Next Full: Sep 26 \| Next New: Oct 10", whichever comes first shown first, as dates in the chosen time zone (`calcNextMoonPhase` in `moon.js`; checked against USNO's Sep 26 / Oct 10 / Oct 26 2026 phases) |
-| 09:25 | `c57c9df` | a small button at the upper right of the Observer and navigation panes to collapse them: the Observer up to its title, the navigation down to the heading (which still updates, and the arrow keys still work); remembered between visits |
-| 09:30 | | pushed `807c91a` - `c57c9df` |
-| 09:55 | `5217dc8` | details for the horizon markers: hovering over (or tapping) a label shows a floating panel with the next date(s) of its event, the rise / set time that day and the bearing from true north (standstills: what they mark, last / next); `calcSunLongitudeMoment` in `sun.js` for the fire festival dates; `seasons.js` now loaded by the viewer |
-| 10:00 | | pushed `5217dc8`; talked through how to do the stars (real or fake, and the Milky Way) |
-| 10:35 | `112f24b` | real stars: the Yale Bright Star Catalogue (5th revised ed., downloaded from CDS, catalogue V/50) trimmed to the 2,887 stars down to magnitude 5.5 (`js/stars.js`, 55 KB); `precessionMatrix` in `astro.js`; drawn as points turned by one rotation, fading with twilight and moonlight, dimmer near the horizon |
-| 10:50 | `c91f066` | the Milky Way, drawn by the sky shader along the galactic plane (the stars' rotation, then J2000 to galactic coordinates): widest and brightest towards Sagittarius, with the bulge, the Great Rift and patchy star clouds; only on a dark night |
-| 11:00 | *(next commit)* | the Milky Way made much brighter (it was almost invisible): about 2.4x, a brighter outer band, and visible lower towards the horizon |
+| 08:53 | `ee457c6` | "Auto" time zone, worked out from the lat / long with `@photostructure/tz-lookup` 11.7.0 (downloaded from npm, CC0, into `js/lib/tz-lookup`), with summer time from the browser's own time zone rules; the default |
+| 09:03 | `f7dbb0c` | a note under the paste field in the location dialog: on Auto, that the time zone will follow the new location and is worth checking; on a fixed offset, that it won't change |
+| 09:10 | `73c969e` | a second line under the moon's phase: "Next Full: Sep 26 \| Next New: Oct 10", whichever comes first shown first, as dates in the chosen time zone (`calcNextMoonPhase` in `moon.js`; checked against USNO's Sep 26 / Oct 10 / Oct 26 2026 phases) |
+| 09:18 | `c57c9df` | a small button at the upper right of the Observer and navigation panes to collapse them: the Observer up to its title, the navigation down to the heading (which still updates, and the arrow keys still work); remembered between visits |
+| ~09:20 | | pushed `807c91a` - `c57c9df` |
+| 09:35 | `5217dc8` | details for the horizon markers: hovering over (or tapping) a label shows a floating panel with the next date(s) of its event, the rise / set time that day and the bearing from true north (standstills: what they mark, last / next); `calcSunLongitudeMoment` in `sun.js` for the fire festival dates; `seasons.js` now loaded by the viewer |
+| ~09:40 | | pushed `5217dc8`; talked through how to do the stars (real or fake, and the Milky Way) |
+| 09:57 | `112f24b` | real stars: the Yale Bright Star Catalogue (5th revised ed., downloaded from CDS, catalogue V/50) trimmed to the 2,887 stars down to magnitude 5.5 (`js/stars.js`, 55 KB); `precessionMatrix` in `astro.js`; drawn as points turned by one rotation, fading with twilight and moonlight, dimmer near the horizon |
+| 10:01 | `c91f066` | the Milky Way, drawn by the sky shader along the galactic plane (the stars' rotation, then J2000 to galactic coordinates): widest and brightest towards Sagittarius, with the bulge, the Great Rift and patchy star clouds; only on a dark night |
+| 10:05 | `6930adb` | the Milky Way made much brighter (it was almost invisible): about 2.4x, a brighter outer band, and visible lower towards the horizon |
+| ~10:06 | | pushed `112f24b` - `6930adb`; talked through ideas for the terrain |
+| 10:19 | `f278238` | the ground carries on out to near the horizon (450 m, as rings of vertices, denser near the centre), with a haze fading it into the sky's horizon colour |
+| 10:20 | `e5a9b81` | gentle unevenness (up to about 20 cm): flat at the Reset point, level again towards the horizon; columns and eye height follow the ground |
+| 10:22 | `de30c8e` | colour variation: lush / dry grass, clumps, damper dips, patches of bare earth and stone, and a fine grain texture; the colour mix per vertex kept apart from the palette, ready for the seasons |
 
 ### decisions
 
@@ -212,6 +216,23 @@ any calculation
   image, no download, and right for any date and place
 - it shows only on a dark night: its strength follows the stars' limiting magnitude (none until about magnitude
   4, full by 5.5), so it's faint by a full moon and gone in twilight, and it fades out towards the horizon
+- **the horizon stays level**: everything astronomical (arcs, markers, bearings, rise / set times) assumes a level
+  horizon at 0 deg, so the terrain only undulates near the observer and flattens out towards the horizon. a real
+  horizon profile (e.g. Newgrange's hills, which is why its solstice sunrise is ~8:58, not 8:41) would be a
+  bigger, later job needing elevation data
+- **the ground goes out to 450 m** (inside the sky dome), so it meets the sky at a true horizon: from eye height a
+  flat ground's horizon is within 0.05 deg of level. rings of vertices, spaced ~12 cm at the centre growing ~3.5%
+  a ring (~2 m by the plain's edge, 60 m), 256 around: 36k vertices. walking is still limited to the 60 m plain
+- **distance fading is haze, not a spotlight**: Three.js linear fog from 30 m to 450 m, its colour the sky's
+  horizon colour (night to day, plus the twilight glow averaged all the way round). the sky dome, moon and stars
+  (shader materials) aren't fogged by default; the sky's labels, their ticks and the moon's path turn fog off
+- **unevenness**: value noise in three layers (swells ~16, 6 and 2.5 m across), up to about +/-20 cm, flat within
+  ~3 m of the centre, level again by 220 m; the smallest layer fades out beyond ~25-50 m, where the rings are too
+  far apart for it. it shows mostly as light and shade with a low sun (slopes are only ~1-3.6 deg)
+- **colours**: per-vertex mixes (lush / dry grass, clumps, damper dips, bare earth, stone) worked out once, and a
+  palette applied by `colourGround`, so the seasons only need a new palette. the fine grain is a 128 px canvas
+  tile over 4 m, with speckles of ~3 and ~12 cm (1 cm speckles averaged away to flat grey), multiplied over the
+  colours
 
 ### validation
 
@@ -245,5 +266,7 @@ the test scripts are in this session's scratchpad (`test_location.js`, `test_sta
   together, before any frame is drawn, so "the view didn't turn" proved nothing (the first check that the dialog
   blocks the arrow keys was like this). hold the key with a `keydown` event, take a couple of screenshots (each forces
   a frame while the preview pane is hidden, when no frames are drawn otherwise), then send the `keyup`
+- **estimated times in the DEVLOG drift**: several rows written from memory were minutes out, and three were 30-55
+  minutes out; take them from `git log --date=format:%H:%M` (and `date`) instead
 - a directions link can start `/dir//53.69,...` (an empty starting point), which the first version of the path
   pattern missed

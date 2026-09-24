@@ -19,7 +19,9 @@ ideas for the 3D viewer (viewer.html), roughly in the order we plan to tackle th
 - [x] **stars in the night sky**: after all, the real stars (it turned out little more work than fake ones, as the whole sky turns as one): the Bright Star Catalogue's 2,887 stars down to magnitude 5.5, placed for the observer's date, time and place, fading in with twilight (brightest first), dimmer near the horizon and washed out by a bright moon. still no names or constellation lines: this isn't Star Walk
 - [x] **the Milky Way**: a soft band along the galactic plane, drawn by the sky shader in its proper place and rotation (brightest towards Sagittarius, with a darker dust lane), an impression rather than a photograph
 - [ ] **the planets** (maybe later): Venus and Jupiter are often the brightest things in the night sky after the moon, so a real star field feels incomplete without them; rough positions from a small table of orbital elements
-- [ ] **more interesting terrain**, with the ground's colour following the season, e.g. grey in winter, brown in spring, green in summer, orange in autumn (following the observer's hemisphere)
+- [x] **more interesting terrain**: the ground out to a level horizon with haze, gentle unevenness (up to ~20 cm, flat at the Reset point and towards the horizon), and colour variation (lush / dry grass, bare earth, stone, fine grain)
+- [ ] **the ground's colour following the season**, e.g. grey in winter, brown in spring, green in summer, orange in autumn (following the observer's hemisphere): a palette per season for `colourGround`, blended through the year
+- [ ] (for the standing stones) small scattered detail (rocks, tussocks) for a sense of scale, and shadows from the sun
 - [ ] **standing stone rings**: turn the 2D rings of the original calendar page (index.html: the solar year, the fire festivals and the lunar month) into rings of standing stones around the observer, with a small floating marker above the stone for where "now" falls in each ring
 
 ## other ideas raised along the way
