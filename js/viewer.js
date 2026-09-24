@@ -423,6 +423,11 @@ var MOON_FRAGMENT_SHADER = [
     'uniform float daylight;',
     'uniform vec3 litColor;',
     'uniform vec3 shadowColor;',
+    'uniform sampler2D moonMap;', // the moon's surface, by selenographic longitude (0 in the middle, east to the right) and latitude
+    'uniform float hasMap;', // 0 until the map has loaded
+    'uniform vec3 moonEast;', // world directions of the moon's own axes: east (longitude 90), north, and towards the Earth
+    'uniform vec3 moonNorth;',
+    'uniform vec3 moonToEarth;',
     'varying vec2 vDisc;',
     'varying mat3 vDiscToWorld;',
     '',
@@ -439,11 +444,15 @@ var MOON_FRAGMENT_SHADER = [
     // (the real moon's lit side is fairly evenly bright, so there's no gradual shading across it)
     '    float lit = smoothstep(0.0, 0.04, dot(normal, sunDirection));',
     '',
+    '    vec3 surface = vec3(dot(normal, moonEast), dot(normal, moonNorth), dot(normal, moonToEarth));',
+    '    vec2 uv = vec2(0.5 + (atan(surface.x, surface.z) / 6.2831853), 0.5 + (asin(clamp(surface.y, -1.0, 1.0)) / 3.1415927));',
+    '    vec3 albedo = mix(vec3(1.0), texture2D(moonMap, uv).rgb / 0.62, 0.85 * hasMap);',
+    '',
     // by day the whole moon is a little washed out, and the shadowed side fainter still
     '    float litOpacity = mix(1.0, 0.8, daylight);',
     '    float shadowOpacity = mix(0.18, 0.16, daylight);',
     '',
-    '    gl_FragColor = vec4(mix(shadowColor, litColor, lit), mix(shadowOpacity, litOpacity, lit) * coverage);',
+    '    gl_FragColor = vec4(mix(shadowColor, litColor, lit) * albedo, mix(shadowOpacity, litOpacity, lit) * coverage);',
     '}'
 ].join('\n');
 
@@ -454,7 +463,12 @@ var moon = new THREE.Mesh(
             sunDirection: { value: skyDome.material.uniforms.sunDirection.value }, // shared with the sky
             daylight: { value: 0 },
             litColor: { value: srgbColor('#f4f1e6') },
-            shadowColor: { value: srgbColor('#aab4cc') }
+            shadowColor: { value: srgbColor('#aab4cc') },
+            moonMap: { value: null },
+            hasMap: { value: 0 },
+            moonEast: { value: new THREE.Vector3(1, 0, 0) },
+            moonNorth: { value: new THREE.Vector3(0, 1, 0) },
+            moonToEarth: { value: new THREE.Vector3(0, 0, 1) }
         },
         vertexShader: MOON_VERTEX_SHADER,
         fragmentShader: MOON_FRAGMENT_SHADER,
@@ -463,6 +477,28 @@ var moon = new THREE.Mesh(
 );
 var moonOffset = new THREE.Vector3(); // from the observer to the moon
 scene.add(moon);
+
+// the moon's surface: a map of the whole moon from the Lunar Reconnaissance Orbiter, from NASA's CGI Moon Kit
+// (credit: NASA's Scientific Visualization Studio, https://svs.gsfc.nasa.gov/4720). its values are used as they
+// are (sRGB), like the rest of the moon's colours, which the shader writes straight to the screen
+new THREE.TextureLoader().load('js/lib/moon/lroc_color_poles_1k.jpg', function(texture) {
+    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    moon.material.uniforms.moonMap.value = texture;
+    moon.material.uniforms.hasMap.value = 1;
+});
+
+// turns the moon's face the right way for the observer: the middle of its near side (longitude 0) towards them
+// (leaving out libration, its few degrees of wobble), and its north towards the ecliptic's north pole, as its
+// spin axis is within 1.5 deg of it. so the face tilts as the moon crosses the sky, and is upside down from the
+// southern hemisphere. skyRotation is the stars' rotation (J2000 to the scene)
+var ECLIPTIC_POLE_J2000 = new THREE.Vector3(0, -Math.sin(THREE.MathUtils.degToRad(23.4393)), Math.cos(THREE.MathUtils.degToRad(23.4393)));
+function setMoonOrientation(moonDirection, skyRotation) {
+    var u = moon.material.uniforms;
+    u.moonToEarth.value.copy(moonDirection).negate().normalize();
+    var north = ECLIPTIC_POLE_J2000.clone().applyMatrix4(skyRotation);
+    u.moonNorth.value.copy(north).addScaledVector(u.moonToEarth.value, -north.dot(u.moonToEarth.value)).normalize();
+    u.moonEast.value.crossVectors(u.moonNorth.value, u.moonToEarth.value); // (to the right, seen with north up)
+}
 
 // stars: the Bright Star Catalogue's stars down to magnitude 5.5 (BRIGHT_STARS, from stars.js), about what can be
 // seen from a dark country site. they're fixed on the celestial sphere, which turns as one with the Earth, so a
@@ -1999,6 +2035,7 @@ function onObserverChange(obs) {
     var phase = calcMoonIllumination(obs.date);
     setMoonLight(moonPos.azimuth, moonPos.altitude, phase.illumination, daylightAmount(sun.altitude));
     setStars(obs, sun.altitude, moonPos.altitude, phase.illumination);
+    setMoonOrientation(skyDirection(moonPos.azimuth, moonPos.altitude), stars.matrix);
     updateGroundSeason(obs);
     document.getElementById('moonPhase').textContent = phase.name + ' · ' + Math.round(phase.illumination * 100) + '% lit';
     document.getElementById('moonNextPhases').textContent = formatNextPhases(obs.date);
