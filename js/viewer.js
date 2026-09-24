@@ -711,6 +711,50 @@ function initArcToggles() {
     applyArcToggles();
 }
 
+// the observer panel and the navigation controls can each be collapsed (remembered between visits): the
+// observer panel up to its title, the navigation controls down to the heading
+var PANELS_KEY = 'irishcal.viewer.panels';
+var PANELS = [
+    { key: 'observer', panel: document.getElementById('observer'), toggle: document.getElementById('observerToggle'),
+      name: 'the observer panel', collapseArrow: '▲', expandArrow: '▼' },
+    { key: 'hud', panel: document.getElementById('hud'), toggle: document.getElementById('hudToggle'),
+      name: 'the navigation controls', collapseArrow: '▼', expandArrow: '▲' }
+];
+
+function setPanelCollapsed(p, collapsed) {
+    p.panel.classList.toggle('collapsed', collapsed);
+    p.toggle.textContent = collapsed ? p.expandArrow : p.collapseArrow;
+    p.toggle.title = (collapsed ? 'Show ' : 'Hide ') + p.name;
+    p.toggle.setAttribute('aria-label', p.toggle.title);
+    p.toggle.setAttribute('aria-expanded', !collapsed);
+}
+
+function savePanels() {
+    var collapsed = {};
+    PANELS.forEach(function(p) { collapsed[p.key] = p.panel.classList.contains('collapsed'); });
+    try {
+        localStorage.setItem(PANELS_KEY, JSON.stringify(collapsed));
+    } catch(e) {
+        // storage unavailable: the panels just open expanded next time
+    }
+}
+
+function initPanelToggles() {
+    var saved = null;
+    try {
+        saved = JSON.parse(localStorage.getItem(PANELS_KEY));
+    } catch(e) {
+        // nothing saved, or storage unavailable: start with both expanded
+    }
+    PANELS.forEach(function(p) {
+        setPanelCollapsed(p, !!(saved && saved[p.key]));
+        p.toggle.addEventListener('click', function() {
+            setPanelCollapsed(p, !p.panel.classList.contains('collapsed'));
+            savePanels();
+        });
+    });
+}
+
 // places the moon (degrees: azimuth clockwise from north, altitude above the horizon, apparent diameter)
 function setMoon(azimuth, altitude, diameter) {
     moonOffset.copy(skyDirection(azimuth, altitude)).multiplyScalar(MOON_DISTANCE);
@@ -1338,6 +1382,7 @@ window.addEventListener('resize', function() {
 });
 
 initArcToggles();
+initPanelToggles();
 initObserverInputs();
 readObserverInputs();
 resetView();

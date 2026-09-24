@@ -18,7 +18,9 @@
                 padding: .75rem 1rem; border-radius: 6px;
                 background: rgba(0, 17, 34, .75);
             }
-            #observer .title { margin: 0 0 .5rem; font-weight: bold; }
+            #observer .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+            #observer .title { margin: 0; font-weight: bold; }
+            #observer .collapsible-inner > .fields { padding-top: .5rem; }
             #observer .fields { display: grid; grid-template-columns: auto auto; gap: .4rem .75rem; align-items: center; }
             #observer label, #observer .label { font-size: .85rem; }
             #observer .readout { font-size: .85rem; max-width: 15rem; }
@@ -74,19 +76,39 @@
 
             #hud {
                 position: fixed; left: 50%; bottom: 1rem; transform: translateX(-50%);
-                display: flex; flex-direction: column; align-items: center; gap: .5rem;
-                padding: .5rem .75rem .75rem; border-radius: 6px;
+                display: flex; flex-direction: column; align-items: center;
+                padding: .5rem 2.1rem .75rem; border-radius: 6px; /* (room either side for the toggle, keeping it centred) */
                 background: rgba(0, 17, 34, .75);
                 user-select: none; -webkit-user-select: none;
             }
             #heading { min-width: 11rem; text-align: center; }
             #heading .deg { font-size: 1.2rem; font-weight: bold; }
-            #heading .hint { font-size: .75rem; opacity: .75; }
-            #heading .touch-hint { display: none; }
+            #hud .collapsible-inner { display: flex; flex-direction: column; align-items: center; gap: .5rem; }
+            #hud .hint { font-size: .75rem; opacity: .75; }
+            #hud .touch-hint { display: none; }
             @media (hover: none) and (pointer: coarse) {
-                #heading .mouse-hint { display: none; }
-                #heading .touch-hint { display: block; }
+                #hud .mouse-hint { display: none; }
+                #hud .touch-hint { display: block; }
             }
+            #hud.collapsed { padding-bottom: .5rem; }
+            #hudToggle { position: absolute; top: .45rem; right: .45rem; }
+
+            /* the observer and navigation panes collapse to their title / heading: the body's grid row shrinks
+               from its full height (1fr) to nothing (0fr), which can be animated, then it's hidden so its
+               fields and buttons can't be tabbed to */
+            .collapsible { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .2s ease; }
+            .collapsed .collapsible { grid-template-rows: 0fr; }
+            .collapsible-inner { min-height: 0; overflow: hidden; padding: 2px; margin: -2px; } /* (room for outlines) */
+            .collapsed .collapsible-inner { visibility: hidden; transition: visibility 0s .2s; }
+            @media (prefers-reduced-motion: reduce) {
+                .collapsible, .collapsed .collapsible-inner { transition: none; }
+            }
+            .panel-toggle {
+                width: 1.5rem; height: 1.5rem; padding: 0; flex: none;
+                font: inherit; font-size: .65rem; line-height: 1;
+                border: 1px solid #9ab; border-radius: 4px; background: #234; color: #fff; cursor: pointer;
+            }
+            .panel-toggle:hover { background: #3a5570; }
 
             #controls {
                 display: grid; gap: .3rem;
@@ -132,32 +154,39 @@
         <div id="scene"></div>
 
         <form id="observer" autocomplete="off">
-            <p class="title">Observer</p>
-            <div class="fields">
-                <label for="lat">Latitude</label>
-                <input id="lat" type="number" step="any" min="-90" max="90" value="53.6947">
-                <label for="lon">Longitude</label>
-                <input id="lon" type="number" step="any" min="-180" max="180" value="-6.4755">
-                <button id="findLocation" class="link" type="button">How to get your lat / long easily</button>
-                <label for="date">Date</label>
-                <input id="date" type="date">
-                <label for="time">Time</label>
-                <span class="time-row">
-                    <input id="time" type="time">
-                    <select id="timeZone" aria-label="Time zone"></select>
-                </span>
-                <span id="timeZoneNote" class="note"></span>
-                <span class="label">Sun</span>
-                <span id="sunPosition" class="readout"></span>
-                <span class="label">Moon</span>
-                <span id="moonPosition" class="readout"></span>
-                <span class="label">Phase</span>
-                <span class="readout"><span id="moonPhase"></span><br><span id="moonNextPhases"></span></span>
-                <span class="label">Arcs</span>
-                <span class="toggles">
-                    <label><input id="showSunArcs" type="checkbox" checked> Sun</label>
-                    <label><input id="showMoonArcs" type="checkbox" checked> Moon</label>
-                </span>
+            <div class="panel-header">
+                <p class="title">Observer</p>
+                <button id="observerToggle" class="panel-toggle" type="button" aria-controls="observerBody"></button>
+            </div>
+            <div id="observerBody" class="collapsible">
+                <div class="collapsible-inner">
+                    <div class="fields">
+                        <label for="lat">Latitude</label>
+                        <input id="lat" type="number" step="any" min="-90" max="90" value="53.6947">
+                        <label for="lon">Longitude</label>
+                        <input id="lon" type="number" step="any" min="-180" max="180" value="-6.4755">
+                        <button id="findLocation" class="link" type="button">How to get your lat / long easily</button>
+                        <label for="date">Date</label>
+                        <input id="date" type="date">
+                        <label for="time">Time</label>
+                        <span class="time-row">
+                            <input id="time" type="time">
+                            <select id="timeZone" aria-label="Time zone"></select>
+                        </span>
+                        <span id="timeZoneNote" class="note"></span>
+                        <span class="label">Sun</span>
+                        <span id="sunPosition" class="readout"></span>
+                        <span class="label">Moon</span>
+                        <span id="moonPosition" class="readout"></span>
+                        <span class="label">Phase</span>
+                        <span class="readout"><span id="moonPhase"></span><br><span id="moonNextPhases"></span></span>
+                        <span class="label">Arcs</span>
+                        <span class="toggles">
+                            <label><input id="showSunArcs" type="checkbox" checked> Sun</label>
+                            <label><input id="showMoonArcs" type="checkbox" checked> Moon</label>
+                        </span>
+                    </div>
+                </div>
             </div>
         </form>
 
@@ -189,17 +218,22 @@
         </dialog>
 
         <div id="hud">
+            <button id="hudToggle" class="panel-toggle" type="button" aria-controls="hudBody"></button>
             <div id="heading">
                 <div class="deg"></div>
-                <div class="hint mouse-hint">&larr; &rarr; turn &middot; &uarr; &darr; move &middot; right-drag to look</div>
-                <div class="hint touch-hint">drag the view to look around</div>
             </div>
-            <div id="controls">
-                <button id="moveForward" type="button" aria-label="Move forward">&#9650;</button>
-                <button id="turnLeft" type="button" aria-label="Turn left">&#9664;</button>
-                <button id="reset" type="button" aria-label="Reset to the centre, facing south">Reset</button>
-                <button id="turnRight" type="button" aria-label="Turn right">&#9654;</button>
-                <button id="moveBack" type="button" aria-label="Move back">&#9660;</button>
+            <div id="hudBody" class="collapsible">
+                <div class="collapsible-inner">
+                    <div class="hint mouse-hint">&larr; &rarr; turn &middot; &uarr; &darr; move &middot; right-drag to look</div>
+                    <div class="hint touch-hint">drag the view to look around</div>
+                    <div id="controls">
+                        <button id="moveForward" type="button" aria-label="Move forward">&#9650;</button>
+                        <button id="turnLeft" type="button" aria-label="Turn left">&#9664;</button>
+                        <button id="reset" type="button" aria-label="Reset to the centre, facing south">Reset</button>
+                        <button id="turnRight" type="button" aria-label="Turn right">&#9654;</button>
+                        <button id="moveBack" type="button" aria-label="Move back">&#9660;</button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -208,7 +242,7 @@
         <script src="js/moon.js?v=20260924e"></script>
         <script src="js/location.js?v=20260924a"></script>
         <script src="js/lib/tz-lookup/tz.js?v=11.7.0"></script>
-        <script type="module" src="js/viewer.js?v=20260924za"></script>
+        <script type="module" src="js/viewer.js?v=20260924zb"></script>
 
     </body>
 </html>

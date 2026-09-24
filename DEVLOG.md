@@ -127,7 +127,8 @@ any calculation
 | 08:43 | `807c91a` | time zone dropdown beside the observer's time (fixed UTC offsets, remembered); changing it converts the date / time so the moment stays the same; rise / set times follow it; "Time (UTC)" is now just "Time" |
 | 09:00 | `ee457c6` | "Auto" time zone, worked out from the lat / long with `@photostructure/tz-lookup` 11.7.0 (downloaded from npm, CC0, into `js/lib/tz-lookup`), with summer time from the browser's own time zone rules; the default |
 | 09:10 | `f7dbb0c` | a note under the paste field in the location dialog: on Auto, that the time zone will follow the new location and is worth checking; on a fixed offset, that it won't change |
-| 09:15 | *(next commit)* | a second line under the moon's phase: "Next Full: Sep 26 \| Next New: Oct 10", whichever comes first shown first, as dates in the chosen time zone (`calcNextMoonPhase` in `moon.js`; checked against USNO's Sep 26 / Oct 10 / Oct 26 2026 phases) |
+| 09:15 | `73c969e` | a second line under the moon's phase: "Next Full: Sep 26 \| Next New: Oct 10", whichever comes first shown first, as dates in the chosen time zone (`calcNextMoonPhase` in `moon.js`; checked against USNO's Sep 26 / Oct 10 / Oct 26 2026 phases) |
+| 09:25 | *(next commit)* | a small button at the upper right of the Observer and navigation panes to collapse them: the Observer up to its title, the navigation down to the heading (which still updates, and the arrow keys still work); remembered between visits |
 
 ### decisions
 
@@ -173,10 +174,12 @@ any calculation
 | what | result |
 |---|---|
 | `parseMapsLocation`, 29 cases (pin, place, search, directions, `?q=` / `?query=` links; decimal and DMS text; short links, missing / out-of-range coordinates) | all pass |
-| in the browser | pasting a Stonehenge pin link moved the observer (sunrise 5:56 UTC, as expected), survived a reload; Escape, Cancel, backdrop, Back to Newgrange, arrow keys blocked while open; phone-width layout |
+| in the browser | pasting a Stonehenge pin link moved the observer (sunrise 5:56 UTC, as expected), survived a reload; Escape, Cancel, backdrop, Back to Newgrange, arrow keys blocked while open (only properly shown later, see "problems hit"); phone-width layout |
 | time zones | 12:00 UTC -> 7:00 in UTC-5 with the sun unmoved; UTC+5:30, UTC-12 and UTC+14 (date rolls over); rise / set times shift with the zone; remembered after a reload; fits the panel at phone width |
 | tz-lookup, 20 places | right for all but Lifford (a Donegal border town, given Europe/London, which has the same offset); includes Belfast / Derry / Strabane, Carnac, Callanish, Phoenix (no summer time), Kathmandu, Chatham, Kiritimati, mid-Atlantic |
 | Auto in the browser | Newgrange UTC in December / UTC+1 in July; moving to New York, Kathmandu (+5:45), Chatham (+12:45), mid-Atlantic (-2, "at sea") keeps the moment; manual choice kept when moving; both clock changes; phone width with "Auto (UTC+12:45)" |
+| next full / new | 26 Sep, 10 Oct, 26 Oct 2026 to the minute of USNO; order swaps after the full moon; dates follow the time zone (the 24 Dec 01:28 UTC full moon is Dec 23 in UTC-5) |
+| collapsing panes | both collapse and expand, remembered after a reload; hidden buttons can't be tabbed to; holding the right arrow still turns the view with the navigation pane collapsed (180 -> 237 deg), and doesn't with the location dialog open; phone width |
 
 the test script is in this session's scratchpad (`test_location.js`), not the repo
 
@@ -189,5 +192,11 @@ the test script is in this session's scratchpad (`test_location.js`), not the re
   with `node --input-type=module --check < js/viewer.js` after a scripted edit
 - bash heredocs with lots of quotes in them can fail to parse in this environment: write longer edit scripts to a
   file in the scratchpad and run that
+- **the working copies have Windows (CRLF) line endings**, so an edit script searching for text with plain `\n`
+  newlines finds nothing: convert to `\n` first and write back with the file's own endings
+- **a quick key press doesn't show turning**: pressing an arrow key in the browser tool sends the press and release
+  together, before any frame is drawn, so "the view didn't turn" proved nothing (the first check that the dialog
+  blocks the arrow keys was like this). hold the key with a `keydown` event, take a couple of screenshots (each forces
+  a frame while the preview pane is hidden, when no frames are drawn otherwise), then send the `keyup`
 - a directions link can start `/dir//53.69,...` (an empty starting point), which the first version of the path
   pattern missed
