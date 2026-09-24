@@ -123,8 +123,9 @@ any calculation
 |---|---|---|
 | ~08:05 | | reviewed `DEVLOG.md` and `TODO.md` to pick up from the last session |
 | 08:30 | `ac6f1b7` | (feature/002-3d_viewer) "how to get your lat / long easily" dialog: paste coordinates or a Google Maps link to set the location (`js/location.js`); the last location is remembered in local storage, with "Back to Newgrange" to return to the default |
-| 08:35 | | pushed `ac6f1b7` and the DEVLOG commit; paused |
-| ~08:50 | *(next commit)* | time zone dropdown beside the observer's time (fixed UTC offsets, remembered); changing it converts the date / time so the moment stays the same; rise / set times follow it; "Time (UTC)" is now just "Time" |
+| 08:33 | | pushed `ac6f1b7` and the DEVLOG commit; paused |
+| 08:43 | `807c91a` | time zone dropdown beside the observer's time (fixed UTC offsets, remembered); changing it converts the date / time so the moment stays the same; rise / set times follow it; "Time (UTC)" is now just "Time" |
+| 09:00 | *(next commit)* | "Auto" time zone, worked out from the lat / long with `@photostructure/tz-lookup` 11.7.0 (downloaded from npm, CC0, into `js/lib/tz-lookup`), with summer time from the browser's own time zone rules; the default |
 
 ### decisions
 
@@ -150,6 +151,20 @@ any calculation
 - **changing the time zone keeps the moment the same**: the date and time fields are re-written in the new zone
   (12:00pm UTC becomes 7:00am in UTC-5, and the date rolls over where needed); the observer's state stays in UTC
 - the sunrise / moonrise times are shown in the chosen zone, still for the observer's local solar day
+- **the time zone lookup is `@photostructure/tz-lookup`**, the maintained fork of `tz-lookup` (abandoned in 2020):
+  one 73 KB script with no network use, kept in `js/lib/tz-lookup` so the viewer still works offline. it trades
+  accuracy for size (its README: ~5% of inhabited places get a zone with a different offset, mostly near borders),
+  so the fixed offsets stay in the dropdown to override it
+- **"Auto" is the first choice and the default**, shown as e.g. "Auto (UTC+1)", with a note under the time naming
+  the zone ("Europe/Dublin time, from the location"; "At sea: nautical time" for the open ocean). a fixed offset
+  picked by hand is remembered and not changed by moving
+- **in Auto, moving into another zone keeps the moment** (the date / time are re-written in the new zone), while
+  **changing the date keeps the time typed**, with the offset following the date (12:00 in July in Ireland is
+  UTC+1, in December UTC), like a real clock
+- offsets for a named zone come from `Intl.DateTimeFormat` (no time zone data of our own); if the browser doesn't
+  know a zone, it falls back to nautical time from the longitude
+- at the clock changes: a time that doesn't exist (e.g. 01:30 on the spring change in Ireland) reads as the
+  hour after, and one that happens twice (01:30 on the autumn change) as the second, winter time one
 
 ### validation
 
@@ -158,6 +173,8 @@ any calculation
 | `parseMapsLocation`, 29 cases (pin, place, search, directions, `?q=` / `?query=` links; decimal and DMS text; short links, missing / out-of-range coordinates) | all pass |
 | in the browser | pasting a Stonehenge pin link moved the observer (sunrise 5:56 UTC, as expected), survived a reload; Escape, Cancel, backdrop, Back to Newgrange, arrow keys blocked while open; phone-width layout |
 | time zones | 12:00 UTC -> 7:00 in UTC-5 with the sun unmoved; UTC+5:30, UTC-12 and UTC+14 (date rolls over); rise / set times shift with the zone; remembered after a reload; fits the panel at phone width |
+| tz-lookup, 20 places | right for all but Lifford (a Donegal border town, given Europe/London, which has the same offset); includes Belfast / Derry / Strabane, Carnac, Callanish, Phoenix (no summer time), Kathmandu, Chatham, Kiritimati, mid-Atlantic |
+| Auto in the browser | Newgrange UTC in December / UTC+1 in July; moving to New York, Kathmandu (+5:45), Chatham (+12:45), mid-Atlantic (-2, "at sea") keeps the moment; manual choice kept when moving; both clock changes; phone width with "Auto (UTC+12:45)" |
 
 the test script is in this session's scratchpad (`test_location.js`), not the repo
 
@@ -165,5 +182,10 @@ the test script is in this session's scratchpad (`test_location.js`), not the re
 
 - **no python on this machine** (the Windows "python" is just a Microsoft Store shortcut): use node or the editor
   for scripted edits
+- **a regular expression inside a JavaScript template string loses its backslashes** (`/^Etc\//` became
+  `/^Etc//`, a syntax error): an edit script written with template strings broke the page. check the result
+  with `node --input-type=module --check < js/viewer.js` after a scripted edit
+- bash heredocs with lots of quotes in them can fail to parse in this environment: write longer edit scripts to a
+  file in the scratchpad and run that
 - a directions link can start `/dir//53.69,...` (an empty starting point), which the first version of the path
   pattern missed

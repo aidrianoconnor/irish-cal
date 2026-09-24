@@ -968,6 +968,7 @@ var lonInput = document.getElementById('lon');
 var dateInput = document.getElementById('date');
 var timeInput = document.getElementById('time');
 var timeZoneInput = document.getElementById('timeZone');
+var timeZoneNote = document.getElementById('timeZoneNote');
 
 // the last latitude / longitude used, so the viewer reopens at the same place (the date and time always
 // start at now)
@@ -981,7 +982,71 @@ var TIME_ZONE_OFFSETS = [
     0, 60, 120, 180, 210, 240, 270, 300, 330, 345, 360, 390, 420, 480, 525, 540, 570, 600, 630, 660,
     720, 765, 780, 840
 ];
-var timeZoneOffset = 0; // the date and time fields are in this time zone (minutes ahead of UTC)
+
+// the date and time fields are in the chosen time zone: 'auto' (worked out from the location, with its summer
+// time rules), or one of the fixed offsets above (minutes ahead of UTC)
+var TIME_ZONE_AUTO = 'auto';
+var timeZoneChoice = TIME_ZONE_AUTO;
+var autoTimeZone = null; // the named time zone at the observer's location, e.g. "Europe/Dublin"
+
+// the named time zone at a place, from tz-lookup (js/lib/tz-lookup, loaded as a regular script before this
+// module). it's approximate near borders, and out at sea gives nautical time (e.g. "Etc/GMT+2", which is UTC-2)
+function lookUpTimeZone(lat, lon) {
+    try {
+        return tzlookup(lat, lon);
+    } catch(e) {
+        return null;
+    }
+}
+
+// a named time zone's offset from UTC (minutes) at the given moment, from the browser's own time zone rules;
+// null if the browser doesn't know the zone
+var zoneFormats = {};
+function namedZoneOffset(zone, date) {
+    try {
+        if(!zoneFormats[zone]) {
+            zoneFormats[zone] = new Intl.DateTimeFormat('en-US', {
+                timeZone: zone, hourCycle: 'h23',
+                year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric'
+            });
+        }
+        var parts = {};
+        zoneFormats[zone].formatToParts(date).forEach(function(part) { parts[part.type] = parseInt(part.value, 10); });
+        var wallClock = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+        return Math.round((wallClock - (Math.floor(date.getTime() / MINUTE) * MINUTE)) / MINUTE);
+    } catch(e) {
+        return null;
+    }
+}
+
+// the chosen time zone's offset from UTC (minutes) at the given moment
+function timeZoneOffsetAt(date) {
+    if(timeZoneChoice !== TIME_ZONE_AUTO) {
+        return timeZoneChoice;
+    }
+    var offset = autoTimeZone ? namedZoneOffset(autoTimeZone, date) : null;
+    return offset !== null ? offset : Math.round(observer.lon / 15) * 60; // (nautical time if the zone isn't known)
+}
+
+// the moment meant by a date and time in the chosen zone (given in ms, as if they were UTC). the offset can
+// depend on the moment itself (summer time), so it's found in two steps
+function wallClockToDate(wallClock) {
+    var guess = wallClock - (timeZoneOffsetAt(new Date(wallClock)) * MINUTE);
+    return new Date(wallClock - (timeZoneOffsetAt(new Date(guess)) * MINUTE));
+}
+
+// the "Auto" choice shows the offset it works out, and a note under the time says which zone it's from
+function updateTimeZoneDisplay() {
+    var choice = timeZoneChoice;
+    timeZoneChoice = TIME_ZONE_AUTO; // (what "Auto" gives, even while a fixed offset is chosen)
+    timeZoneInput.options[0].text = 'Auto (' + formatTimeZone(timeZoneOffsetAt(observer.date)) + ')';
+    timeZoneChoice = choice;
+
+    timeZoneNote.hidden = timeZoneChoice !== TIME_ZONE_AUTO;
+    timeZoneNote.textContent = !autoTimeZone ? 'Time zone unknown here: nautical time'
+        : autoTimeZone.indexOf('Etc/') == 0 ? 'At sea: nautical time'
+        : autoTimeZone.replace(/_/g, ' ') + ' time, from the location';
+}
 
 // e.g. "UTC", "UTC-5", "UTC+5:30"
 function formatTimeZone(offset) {
@@ -994,26 +1059,12 @@ function formatTimeZone(offset) {
 
 // fills the date and time fields with the given moment, in the chosen time zone
 function writeDateTimeInputs(date) {
-    var local = new Date(date.getTime() + (timeZoneOffset * MINUTE)).toISOString();
+    var local = new Date(date.getTime() + (timeZoneOffsetAt(date) * MINUTE)).toISOString();
     dateInput.value = local.slice(0, 10);
     timeInput.value = local.slice(11, 16);
 }
 
 function initObserverInputs() {
-    TIME_ZONE_OFFSETS.forEach(function(offset) {
-        timeZoneInput.add(new Option(formatTimeZone(offset), offset));
-    });
-    try {
-        var savedZone = parseInt(localStorage.getItem(TIME_ZONE_KEY), 10);
-        if(TIME_ZONE_OFFSETS.indexOf(savedZone) > -1) {
-            timeZoneOffset = savedZone;
-        }
-    } catch(e) {
-        // nothing saved, or storage unavailable: start in UTC
-    }
-    timeZoneInput.value = timeZoneOffset;
-    writeDateTimeInputs(new Date());
-
     try {
         var saved = JSON.parse(localStorage.getItem(LOCATION_KEY));
         if(saved && Math.abs(saved.lat) <= 90 && Math.abs(saved.lon) <= 180) {
@@ -1023,6 +1074,26 @@ function initObserverInputs() {
     } catch(e) {
         // nothing saved, or storage unavailable: start at the default (Newgrange)
     }
+
+    timeZoneInput.add(new Option('Auto', TIME_ZONE_AUTO));
+    TIME_ZONE_OFFSETS.forEach(function(offset) {
+        timeZoneInput.add(new Option(formatTimeZone(offset), offset));
+    });
+    try {
+        var savedZone = parseInt(localStorage.getItem(TIME_ZONE_KEY), 10);
+        if(TIME_ZONE_OFFSETS.indexOf(savedZone) > -1) {
+            timeZoneChoice = savedZone;
+        }
+    } catch(e) {
+        // nothing saved (or 'auto' saved), or storage unavailable: work it out from the location
+    }
+    timeZoneInput.value = timeZoneChoice;
+
+    // start at now, in the time zone at the starting location
+    observer.lat = parseFloat(latInput.value);
+    observer.lon = parseFloat(lonInput.value);
+    autoTimeZone = lookUpTimeZone(observer.lat, observer.lon);
+    writeDateTimeInputs(new Date());
 }
 
 function saveLocation() {
@@ -1051,15 +1122,26 @@ function readNumberInput(input, min, max) {
 function readObserverInputs() {
     var lat = readNumberInput(latInput, -90, 90);
     var lon = readNumberInput(lonInput, -180, 180);
-    // (the fields are in the chosen time zone, so back to UTC by taking off its offset)
-    var date = new Date(new Date(dateInput.value + 'T' + timeInput.value + ':00Z').getTime() - (timeZoneOffset * MINUTE));
+    if(lat !== null) observer.lat = lat;
+    if(lon !== null) observer.lon = lon;
+
+    // moving into another time zone (when it's worked out from the location) re-writes the date and time in
+    // the new zone, so the moment itself doesn't change, as when the time zone is changed by hand
+    var zone = lookUpTimeZone(observer.lat, observer.lon);
+    if(zone !== autoTimeZone) {
+        autoTimeZone = zone;
+        if(timeZoneChoice === TIME_ZONE_AUTO) {
+            writeDateTimeInputs(observer.date);
+        }
+    }
+
+    // (the fields are in the chosen time zone, so converted back to UTC)
+    var date = wallClockToDate(new Date(dateInput.value + 'T' + timeInput.value + ':00Z').getTime());
     var dateValid = !isNaN(date.getTime());
     dateInput.classList.toggle('invalid', !dateValid);
     timeInput.classList.toggle('invalid', !dateValid);
-
-    if(lat !== null) observer.lat = lat;
-    if(lon !== null) observer.lon = lon;
     if(dateValid) observer.date = date;
+    updateTimeZoneDisplay();
 
     if(lat !== null || lon !== null) {
         saveLocation();
@@ -1102,7 +1184,7 @@ function formatClockTime(date) {
     if(!date) {
         return 'none';
     }
-    var local = new Date(date.getTime() + (timeZoneOffset * MINUTE));
+    var local = new Date(date.getTime() + (timeZoneOffsetAt(date) * MINUTE));
     var hours = local.getUTCHours();
     return ((hours % 12) || 12) + ':' + ('0' + local.getUTCMinutes()).slice(-2) + (hours < 12 ? 'am' : 'pm');
 }
@@ -1122,9 +1204,9 @@ document.getElementById('observer').addEventListener('input', function(e) {
 // changing the time zone re-writes the date and time in the new zone, so the moment itself doesn't change
 // (e.g. 12:00pm UTC becomes 7:00am in UTC-5)
 timeZoneInput.addEventListener('change', function() {
-    timeZoneOffset = parseInt(timeZoneInput.value, 10);
+    timeZoneChoice = timeZoneInput.value === TIME_ZONE_AUTO ? TIME_ZONE_AUTO : parseInt(timeZoneInput.value, 10);
     try {
-        localStorage.setItem(TIME_ZONE_KEY, timeZoneOffset);
+        localStorage.setItem(TIME_ZONE_KEY, timeZoneChoice);
     } catch(e) {
         // storage unavailable: the time zone just won't be remembered
     }

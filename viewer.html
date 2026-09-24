@@ -27,6 +27,14 @@
             #observer .time-row { display: flex; gap: .4rem; align-items: center; }
             #observer .time-row input { width: 7.25rem; } /* (narrower, to leave room for the time zone) */
             #observer select { font: inherit; font-size: .9rem; padding: .1rem .2rem; }
+            #observer #timeZoneNote { grid-column: 1 / -1; justify-self: end; margin-top: -.15rem; font-size: .8rem; opacity: .75; }
+            #observer #timeZoneNote[hidden] { display: none; }
+            @media (max-width: 400px) {
+                /* a little tighter on phones, to fit the longest time zones, e.g. "Auto (UTC+13:45)" */
+                #observer { padding: .75rem; }
+                #observer .fields { column-gap: .5rem; }
+                #observer .time-row input { width: 6.75rem; }
+            }
             #observer .toggles { display: flex; gap: 1rem; font-size: .85rem; }
             #observer .toggles label { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
             #observer .toggles input { width: auto; margin: 0; }
@@ -137,6 +145,7 @@
                     <input id="time" type="time">
                     <select id="timeZone" aria-label="Time zone"></select>
                 </span>
+                <span id="timeZoneNote" class="note"></span>
                 <span class="label">Sun</span>
                 <span id="sunPosition" class="readout"></span>
                 <span class="label">Moon</span>
@@ -196,7 +205,8 @@
         <script src="js/sun.js?v=20260924d"></script>
         <script src="js/moon.js?v=20260924d"></script>
         <script src="js/location.js?v=20260924a"></script>
-        <script type="module" src="js/viewer.js?v=20260924x"></script>
+        <script src="js/lib/tz-lookup/tz.js?v=11.7.0"></script>
+        <script type="module" src="js/viewer.js?v=20260924y"></script>
 
     </body>
 </html>
