@@ -158,6 +158,8 @@ any calculation
 | ~11:48 | | pushed `1748935` |
 | 11:55 | `a8f04b6` | an "about this viewer" dialog on page load (with "Don't show this again") and a ? button to reopen it |
 | 12:02 | `246b4ec` | the about dialog without the arcs' colour key; its closing note now explains the fire festivals are the solar midpoints, not their traditional 1st of the month, and that the Observer date can be set to the 1st to see those |
+| ~12:03 | | pushed `a8f04b6` - `173f124` |
+| 14:34 | `8084257` | sharable links: the place (and the moment, once chosen) in the page's address; opening a link doesn't replace the remembered place; a copy-link button |
 
 ### decisions
 
@@ -218,6 +220,16 @@ any calculation
   (`irishcal.viewer.hideInfo` in local storage); "Got it", Escape or the backdrop just close it. the ? button is at
   the upper right, but on phones (under 480 px) the observer panel fills the top and the ? landed on its collapse
   button, so there it moves to the bottom right corner, beside the navigation pane
+- **sharable links**: `viewer.html?lat=..&lon=..&date=YYYY-MM-DD&time=HH:MM&tz=auto|<minutes>`. the place is always in
+  the address; the moment only once a date or time has been chosen (or came from a link), so a bookmark of the plain
+  page still opens at "now". the time zone goes with the moment so it means the same instant for everyone (Auto is
+  safe: the same place gives the same zone anywhere). `history.replaceState`, 400 ms after the last change (no
+  history entries; browsers limit how often it can change). invalid values are ignored one by one
+- **a link's place isn't remembered**: opening someone's link would otherwise replace the visitor's own remembered
+  place (seen in testing: a later plain load opened at the link's place). it's used for that visit, and remembered
+  only once the visitor changes the place; a link's time zone was never saved (only a change of the dropdown is)
+- the copy button uses the clipboard API, falling back to copying from a hidden text box (`execCommand('copy')`):
+  the app's embedded test browser refused the clipboard API even for a real click, but the fallback worked
 - **real stars rather than fake ones**: the stars are fixed on the celestial sphere, which turns as one, so a single
   rotation (precession from J2000 to the date, the local sidereal time, then the latitude) places them all, using
   the sidereal time the sun and moon already needed. a fake field would have been barely less work and wouldn't
