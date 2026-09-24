@@ -67,6 +67,8 @@ var container = document.getElementById('scene');
 var renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true; // (shadows from the sun: see sunLight)
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
 
 var scene = new THREE.Scene();
@@ -82,6 +84,31 @@ var ambientLight = new THREE.HemisphereLight();
 scene.add(ambientLight);
 var sunLight = new THREE.DirectionalLight('#fff6e8');
 scene.add(sunLight);
+scene.add(sunLight.target);
+
+// the sun's shadows: the stones and rocks cast them onto the ground. the shadow map covers a square SHADOW_AREA
+// across, seen from the sun, which follows the observer (placeSunLight) so there are shadows wherever they walk;
+// at a low sun it stretches out along the ground, as the long shadows do
+var SHADOW_AREA = 130; // metres
+var SUN_LIGHT_DISTANCE = 150; // how far towards the sun the light sits from the observer
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048); // (about 6 cm a texel; 4096 would take 64 MB of graphics memory)
+sunLight.shadow.camera.left = sunLight.shadow.camera.bottom = -SHADOW_AREA / 2;
+sunLight.shadow.camera.right = sunLight.shadow.camera.top = SHADOW_AREA / 2;
+sunLight.shadow.camera.near = 1;
+sunLight.shadow.camera.far = SUN_LIGHT_DISTANCE * 2;
+sunLight.shadow.bias = -0.0003;
+sunLight.shadow.normalBias = 0.04; // (stops the ground shadowing itself in speckles)
+var sunDirection = new THREE.Vector3(0, 1, 0);
+
+// keeps the sun's light (and so its shadows) centred on the observer, in whole shadow-map texels so the shadows'
+// edges don't shimmer as they walk
+function placeSunLight() {
+    var texel = SHADOW_AREA / sunLight.shadow.mapSize.x;
+    var x = Math.round(camera.position.x / texel) * texel, z = Math.round(camera.position.z / texel) * texel;
+    sunLight.target.position.set(x, 0, z);
+    sunLight.position.set(x, 0, z).addScaledVector(sunDirection, SUN_LIGHT_DISTANCE);
+}
 
 // sky dome: a sphere seen from the inside, coloured by a shader from the sun's position.
 // each point's colour depends on its height above the horizon, how high the sun is
@@ -297,7 +324,7 @@ function daylightAmount(sunAltitude) {
     return THREE.MathUtils.smoothstep(Math.sin(THREE.MathUtils.degToRad(sunAltitude)), -0.17, 0.2);
 }
 
-var DAY_AMBIENT = { sky: new THREE.Color('#cfe6ff'), ground: new THREE.Color('#3d6b2a'), intensity: 1.6 };
+var DAY_AMBIENT = { sky: new THREE.Color('#cfe6ff'), ground: new THREE.Color('#3d6b2a'), intensity: 1.2 };
 var NIGHT_AMBIENT = { sky: new THREE.Color('#5a6a9a'), ground: new THREE.Color('#141c14'), intensity: 0.3 };
 
 // places the sun (degrees: azimuth clockwise from north, altitude above the horizon),
@@ -312,8 +339,9 @@ function setSun(azimuth, altitude) {
     ambientLight.groundColor.lerpColors(NIGHT_AMBIENT.ground, DAY_AMBIENT.ground, daylight);
     ambientLight.intensity = THREE.MathUtils.lerp(NIGHT_AMBIENT.intensity, DAY_AMBIENT.intensity, daylight);
 
-    sunLight.position.copy(direction).multiplyScalar(100);
-    sunLight.intensity = 1.4 * THREE.MathUtils.smoothstep(altitude, -2, 6); // fades out as the sun sets
+    sunDirection.copy(direction);
+    placeSunLight();
+    sunLight.intensity = 2.0 * THREE.MathUtils.smoothstep(altitude, -2, 6); // fades out as the sun sets
 
     moon.material.uniforms.daylight.value = daylight;
 
@@ -1183,6 +1211,7 @@ var ground = new THREE.Mesh(makeGroundGeometry(), new THREE.MeshStandardMaterial
         groundMixes.push(groundMix(positions.getX(i), positions.getZ(i)));
     }
 })();
+ground.receiveShadow = true;
 scene.add(ground);
 
 // the haze: the ground fades into the colour of the sky at the horizon with distance, as far-off land does through
@@ -1336,6 +1365,8 @@ function makeDirectionMarker(direction) {
     var stone = new THREE.Mesh(makeStoneGeometry(seed, direction.cardinal), stoneMaterial);
     // broad faces towards the centre (its +z axis turned to point outwards), give or take a little
     stone.rotation.y = -THREE.MathUtils.degToRad(direction.azimuth) + (0.25 * (stoneRandom(seed, 12) - 0.5));
+    stone.castShadow = true;
+    stone.receiveShadow = true;
     marker.add(stone);
 
     var label = makeLabelSprite(direction.label);
@@ -2211,6 +2242,7 @@ function animate(time) {
 
     // the sky is infinitely far away, so it stays centred on the observer as they walk
     skyDome.position.copy(camera.position);
+    placeSunLight();
     moon.position.copy(camera.position).add(moonOffset);
     moon.lookAt(camera.position); // the moon's disc always faces the observer
     horizonMarkers.position.copy(camera.position);
