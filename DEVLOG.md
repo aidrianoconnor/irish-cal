@@ -157,6 +157,7 @@ any calculation
 | 11:46 | `1748935` | reviewed the 2D calendar (index.html); the 22 findings are in `2D-REVIEW.md`, kept out of `TODO.md` (which is for the 3D viewer) for sessions on the 2D view |
 | ~11:48 | | pushed `1748935` |
 | 11:55 | `a8f04b6` | an "about this viewer" dialog on page load (with "Don't show this again") and a ? button to reopen it |
+| 12:02 | `246b4ec` | the about dialog without the arcs' colour key; its closing note now explains the fire festivals are the solar midpoints, not their traditional 1st of the month, and that the Observer date can be set to the 1st to see those |
 
 ### decisions
 
