@@ -1,0 +1,3 @@
+# the start scripts need their own platforms' line endings, whatever the machine they're checked out on
+*.sh text eol=lf
+*.cmd text eol=crlf
