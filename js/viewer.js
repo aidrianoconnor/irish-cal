@@ -1233,6 +1233,10 @@ function openLocationDialog() {
     showPastedLocation();
     // open the map where the observer is now, to make finding a nearby spot easier
     document.getElementById('mapsLink').href = 'https://www.google.com/maps/@' + observer.lat + ',' + observer.lon + ',15z';
+    // (the time zone only follows the location when it's on Auto)
+    document.getElementById('locationTimeZoneNote').textContent = timeZoneChoice === TIME_ZONE_AUTO
+        ? 'The time zone will be updated automatically for the new location. Be sure to check it\'s right, especially near a border.'
+        : 'The time zone is set by hand (' + formatTimeZone(timeZoneChoice) + '), so it won\'t change with the location.';
     locationDialog.showModal();
     locationPaste.focus();
 }

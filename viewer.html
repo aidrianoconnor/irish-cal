@@ -59,6 +59,7 @@
             #locationDialog .note { margin: 0 0 .75rem; font-size: .8rem; opacity: .8; }
             #locationDialog label { display: block; margin-bottom: .25rem; font-size: .85rem; }
             #locationPaste { font: inherit; width: 100%; padding: .3rem .4rem; box-sizing: border-box; }
+            #locationDialog .tz-note { margin: .3rem 0 0; font-size: .8rem; opacity: .8; }
             #locationDialog .result { min-height: 2.6em; margin: .4rem 0 .6rem; font-size: .85rem; }
             #locationDialog .result.found { color: #9e9; }
             #locationDialog .result.error { color: #fb9; }
@@ -176,6 +177,7 @@
                     the coordinates instead.</p>
                 <label for="locationPaste">Coordinates or Google Maps link</label>
                 <input id="locationPaste" type="text" placeholder="e.g. 53.6947, -6.4755" spellcheck="false">
+                <p id="locationTimeZoneNote" class="tz-note"></p>
                 <p id="locationResult" class="result" aria-live="polite"></p>
                 <div class="buttons">
                     <button id="locationDefault" class="link" type="button">Back to Newgrange</button>
@@ -206,7 +208,7 @@
         <script src="js/moon.js?v=20260924d"></script>
         <script src="js/location.js?v=20260924a"></script>
         <script src="js/lib/tz-lookup/tz.js?v=11.7.0"></script>
-        <script type="module" src="js/viewer.js?v=20260924y"></script>
+        <script type="module" src="js/viewer.js?v=20260924z"></script>
 
     </body>
 </html>
