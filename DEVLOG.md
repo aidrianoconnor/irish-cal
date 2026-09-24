@@ -123,6 +123,8 @@ any calculation
 |---|---|---|
 | ~08:05 | | reviewed `DEVLOG.md` and `TODO.md` to pick up from the last session |
 | 08:30 | `ac6f1b7` | (feature/002-3d_viewer) "how to get your lat / long easily" dialog: paste coordinates or a Google Maps link to set the location (`js/location.js`); the last location is remembered in local storage, with "Back to Newgrange" to return to the default |
+| 08:35 | | pushed `ac6f1b7` and the DEVLOG commit; paused |
+| ~08:50 | *(next commit)* | time zone dropdown beside the observer's time (fixed UTC offsets, remembered); changing it converts the date / time so the moment stays the same; rise / set times follow it; "Time (UTC)" is now just "Time" |
 
 ### decisions
 
@@ -140,6 +142,14 @@ any calculation
   whenever valid lat / long are read, so typing them by hand is remembered too
 - the dialog is a native `<dialog>` (Escape, focus and the dimmed backdrop come free); the "Google Maps" link in it
   opens the map where the observer already is; arrow keys don't move the view while it's open
+- **working out the time zone from the lat / long** is possible (an online service, which needs a key and sends the
+  location to a third party, or an offline boundary lookup like `tz-lookup`), but for now the zone is picked by hand;
+  the offline lookup is on the TODO list. a guess from the longitude (15 deg an hour) is often wrong (e.g. Spain)
+- **the time zones are fixed UTC offsets** (all 38 in use, including the half and quarter hours), not named zones,
+  so there's no summer time: Ireland in summer is UTC+1. the default is UTC, and the choice is remembered
+- **changing the time zone keeps the moment the same**: the date and time fields are re-written in the new zone
+  (12:00pm UTC becomes 7:00am in UTC-5, and the date rolls over where needed); the observer's state stays in UTC
+- the sunrise / moonrise times are shown in the chosen zone, still for the observer's local solar day
 
 ### validation
 
@@ -147,6 +157,7 @@ any calculation
 |---|---|
 | `parseMapsLocation`, 29 cases (pin, place, search, directions, `?q=` / `?query=` links; decimal and DMS text; short links, missing / out-of-range coordinates) | all pass |
 | in the browser | pasting a Stonehenge pin link moved the observer (sunrise 5:56 UTC, as expected), survived a reload; Escape, Cancel, backdrop, Back to Newgrange, arrow keys blocked while open; phone-width layout |
+| time zones | 12:00 UTC -> 7:00 in UTC-5 with the sun unmoved; UTC+5:30, UTC-12 and UTC+14 (date rolls over); rise / set times shift with the zone; remembered after a reload; fits the panel at phone width |
 
 the test script is in this session's scratchpad (`test_location.js`), not the repo
 

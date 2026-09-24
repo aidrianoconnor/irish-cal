@@ -967,15 +967,52 @@ var latInput = document.getElementById('lat');
 var lonInput = document.getElementById('lon');
 var dateInput = document.getElementById('date');
 var timeInput = document.getElementById('time');
+var timeZoneInput = document.getElementById('timeZone');
 
 // the last latitude / longitude used, so the viewer reopens at the same place (the date and time always
 // start at now)
 var LOCATION_KEY = 'irishcal.viewer.location';
+var TIME_ZONE_KEY = 'irishcal.viewer.timezone';
+
+// the time zones offered, as offsets from UTC in minutes: every offset in use around the world
+// (fixed offsets, so summer time is a matter of picking the next one along, e.g. UTC+1 for Ireland in summer)
+var TIME_ZONE_OFFSETS = [
+    -720, -660, -600, -570, -540, -480, -420, -360, -300, -240, -210, -180, -120, -60,
+    0, 60, 120, 180, 210, 240, 270, 300, 330, 345, 360, 390, 420, 480, 525, 540, 570, 600, 630, 660,
+    720, 765, 780, 840
+];
+var timeZoneOffset = 0; // the date and time fields are in this time zone (minutes ahead of UTC)
+
+// e.g. "UTC", "UTC-5", "UTC+5:30"
+function formatTimeZone(offset) {
+    if(offset == 0) {
+        return 'UTC';
+    }
+    var minutes = Math.abs(offset) % 60;
+    return 'UTC' + (offset < 0 ? '-' : '+') + Math.floor(Math.abs(offset) / 60) + (minutes ? ':' + ('0' + minutes).slice(-2) : '');
+}
+
+// fills the date and time fields with the given moment, in the chosen time zone
+function writeDateTimeInputs(date) {
+    var local = new Date(date.getTime() + (timeZoneOffset * MINUTE)).toISOString();
+    dateInput.value = local.slice(0, 10);
+    timeInput.value = local.slice(11, 16);
+}
 
 function initObserverInputs() {
-    var now = new Date();
-    dateInput.value = now.toISOString().slice(0, 10);
-    timeInput.value = now.toISOString().slice(11, 16);
+    TIME_ZONE_OFFSETS.forEach(function(offset) {
+        timeZoneInput.add(new Option(formatTimeZone(offset), offset));
+    });
+    try {
+        var savedZone = parseInt(localStorage.getItem(TIME_ZONE_KEY), 10);
+        if(TIME_ZONE_OFFSETS.indexOf(savedZone) > -1) {
+            timeZoneOffset = savedZone;
+        }
+    } catch(e) {
+        // nothing saved, or storage unavailable: start in UTC
+    }
+    timeZoneInput.value = timeZoneOffset;
+    writeDateTimeInputs(new Date());
 
     try {
         var saved = JSON.parse(localStorage.getItem(LOCATION_KEY));
@@ -1014,7 +1051,8 @@ function readNumberInput(input, min, max) {
 function readObserverInputs() {
     var lat = readNumberInput(latInput, -90, 90);
     var lon = readNumberInput(lonInput, -180, 180);
-    var date = new Date(dateInput.value + 'T' + timeInput.value + ':00Z');
+    // (the fields are in the chosen time zone, so back to UTC by taking off its offset)
+    var date = new Date(new Date(dateInput.value + 'T' + timeInput.value + ':00Z').getTime() - (timeZoneOffset * MINUTE));
     var dateValid = !isNaN(date.getTime());
     dateInput.classList.toggle('invalid', !dateValid);
     timeInput.classList.toggle('invalid', !dateValid);
@@ -1047,7 +1085,7 @@ function onObserverChange(obs) {
     document.getElementById('moonPhase').textContent = phase.name + ' · ' + Math.round(phase.illumination * 100) + '% lit';
 }
 
-// e.g. "Rise: 6:13am | Set: 6:22pm" (UTC, like the observer's time), with "none" for a missing event
+// e.g. "Rise: 6:13am | Set: 6:22pm" (in the chosen time zone, like the observer's time), with "none" for a missing event
 // (the moon skips a rise or set about once a month) and "up / down all day" where it never crosses the horizon
 function formatRiseSet(times) {
     if(times.alwaysAbove) {
@@ -1059,13 +1097,14 @@ function formatRiseSet(times) {
     return 'Rise: ' + formatClockTime(times.rise) + ' | Set: ' + formatClockTime(times.set);
 }
 
-// e.g. "6:13am", in UTC
+// e.g. "6:13am", in the chosen time zone
 function formatClockTime(date) {
     if(!date) {
         return 'none';
     }
-    var hours = date.getUTCHours();
-    return ((hours % 12) || 12) + ':' + ('0' + date.getUTCMinutes()).slice(-2) + (hours < 12 ? 'am' : 'pm');
+    var local = new Date(date.getTime() + (timeZoneOffset * MINUTE));
+    var hours = local.getUTCHours();
+    return ((hours % 12) || 12) + ':' + ('0' + local.getUTCMinutes()).slice(-2) + (hours < 12 ? 'am' : 'pm');
 }
 
 // e.g. "174° S · 36° above the horizon"
@@ -1075,11 +1114,24 @@ function formatSkyPosition(pos) {
 }
 
 document.getElementById('observer').addEventListener('input', function(e) {
-    // the arc toggles live in the same panel, but don't change the observer (they have their own handler)
-    if(e.target !== sunArcsToggle && e.target !== moonArcsToggle) {
+    // the arc toggles and time zone live in the same panel, but have their own handlers
+    if(e.target !== sunArcsToggle && e.target !== moonArcsToggle && e.target !== timeZoneInput) {
         readObserverInputs();
     }
 });
+// changing the time zone re-writes the date and time in the new zone, so the moment itself doesn't change
+// (e.g. 12:00pm UTC becomes 7:00am in UTC-5)
+timeZoneInput.addEventListener('change', function() {
+    timeZoneOffset = parseInt(timeZoneInput.value, 10);
+    try {
+        localStorage.setItem(TIME_ZONE_KEY, timeZoneOffset);
+    } catch(e) {
+        // storage unavailable: the time zone just won't be remembered
+    }
+    writeDateTimeInputs(observer.date);
+    readObserverInputs();
+});
+
 document.getElementById('observer').addEventListener('submit', function(e) {
     e.preventDefault();
     if(document.activeElement) document.activeElement.blur();

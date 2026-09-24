@@ -24,6 +24,9 @@
             #observer .readout { font-size: .85rem; max-width: 15rem; }
             #observer input { font: inherit; font-size: .9rem; width: 9.5rem; padding: .15rem .3rem; box-sizing: border-box; }
             #observer input.invalid { outline: 2px solid #f55; }
+            #observer .time-row { display: flex; gap: .4rem; align-items: center; }
+            #observer .time-row input { width: 7.25rem; } /* (narrower, to leave room for the time zone) */
+            #observer select { font: inherit; font-size: .9rem; padding: .1rem .2rem; }
             #observer .toggles { display: flex; gap: 1rem; font-size: .85rem; }
             #observer .toggles label { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
             #observer .toggles input { width: auto; margin: 0; }
@@ -129,8 +132,11 @@
                 <button id="findLocation" class="link" type="button">How to get your lat / long easily</button>
                 <label for="date">Date</label>
                 <input id="date" type="date">
-                <label for="time">Time (UTC)</label>
-                <input id="time" type="time">
+                <label for="time">Time</label>
+                <span class="time-row">
+                    <input id="time" type="time">
+                    <select id="timeZone" aria-label="Time zone"></select>
+                </span>
                 <span class="label">Sun</span>
                 <span id="sunPosition" class="readout"></span>
                 <span class="label">Moon</span>
@@ -190,7 +196,7 @@
         <script src="js/sun.js?v=20260924d"></script>
         <script src="js/moon.js?v=20260924d"></script>
         <script src="js/location.js?v=20260924a"></script>
-        <script type="module" src="js/viewer.js?v=20260924w"></script>
+        <script type="module" src="js/viewer.js?v=20260924x"></script>
 
     </body>
 </html>
