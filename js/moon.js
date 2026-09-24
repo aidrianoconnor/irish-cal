@@ -113,6 +113,17 @@ function calcMoonPhase(k, phaseIndex) {
     return jdeToDate(jde + c);
 }
 
+// the first moment of the given phase (0 = new, 1 = first quarter, 2 = full, 3 = last quarter) after the given date
+function calcNextMoonPhase(date, phaseIndex) {
+    // start a lunation early, as the mean lunation number can be a day or so out from the true phase
+    var k = Math.floor((dateToJD(date) - NEW_MOON_EPOCH_JDE) / SYNODIC_MONTH) - 1;
+    var phase = calcMoonPhase(k, phaseIndex);
+    while(phase <= date) {
+        phase = calcMoonPhase(++k, phaseIndex);
+    }
+    return phase;
+}
+
 // builds moon phase entries covering a few lunations either side of the given date
 function calcMoonPhaseData(aroundDate) {
     var kNow = Math.floor((dateToJD(aroundDate) - NEW_MOON_EPOCH_JDE) / SYNODIC_MONTH);

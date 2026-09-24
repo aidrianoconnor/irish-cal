@@ -126,7 +126,8 @@ any calculation
 | 08:33 | | pushed `ac6f1b7` and the DEVLOG commit; paused |
 | 08:43 | `807c91a` | time zone dropdown beside the observer's time (fixed UTC offsets, remembered); changing it converts the date / time so the moment stays the same; rise / set times follow it; "Time (UTC)" is now just "Time" |
 | 09:00 | `ee457c6` | "Auto" time zone, worked out from the lat / long with `@photostructure/tz-lookup` 11.7.0 (downloaded from npm, CC0, into `js/lib/tz-lookup`), with summer time from the browser's own time zone rules; the default |
-| 09:10 | *(next commit)* | a note under the paste field in the location dialog: on Auto, that the time zone will follow the new location and is worth checking; on a fixed offset, that it won't change |
+| 09:10 | `f7dbb0c` | a note under the paste field in the location dialog: on Auto, that the time zone will follow the new location and is worth checking; on a fixed offset, that it won't change |
+| 09:15 | *(next commit)* | a second line under the moon's phase: "Next Full: Sep 26 \| Next New: Oct 10", whichever comes first shown first, as dates in the chosen time zone (`calcNextMoonPhase` in `moon.js`; checked against USNO's Sep 26 / Oct 10 / Oct 26 2026 phases) |
 
 ### decisions
 

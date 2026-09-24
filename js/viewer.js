@@ -1165,6 +1165,26 @@ function onObserverChange(obs) {
 
     var phase = calcMoonIllumination(obs.date);
     document.getElementById('moonPhase').textContent = phase.name + ' · ' + Math.round(phase.illumination * 100) + '% lit';
+    document.getElementById('moonNextPhases').textContent = formatNextPhases(obs.date);
+}
+
+// e.g. "Next Full: Sep 26 | Next New: Oct 10", whichever comes first shown first (dates in the chosen time zone)
+function formatNextPhases(date) {
+    var phases = [
+        { name: 'Full', date: calcNextMoonPhase(date, 2) },
+        { name: 'New', date: calcNextMoonPhase(date, 0) }
+    ].sort(function(a, b) { return a.date - b.date; });
+    return phases.map(function(phase) {
+        return 'Next ' + phase.name + ': ' + formatShortDate(phase.date);
+    }).join(' | ');
+}
+
+var MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// e.g. "Sep 26", in the chosen time zone
+function formatShortDate(date) {
+    var local = new Date(date.getTime() + (timeZoneOffsetAt(date) * MINUTE));
+    return MONTH_NAMES[local.getUTCMonth()] + ' ' + local.getUTCDate();
 }
 
 // e.g. "Rise: 6:13am | Set: 6:22pm" (in the chosen time zone, like the observer's time), with "none" for a missing event
