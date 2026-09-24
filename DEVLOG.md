@@ -112,3 +112,47 @@ any calculation
   standstills), horizon markers, toggles, rise / set times
 - next on `TODO.md`: set the location from a Google Maps pin, remember the last location, stars, seasonal terrain,
   standing stone rings (then the smaller items: moon texture, eclipses, dimming labels at night, local time, start script)
+
+---
+
+## 2026-09-24 · ~08:05 - · setting the location from Google Maps
+
+### what we did
+
+| time | commit | action |
+|---|---|---|
+| ~08:05 | | reviewed `DEVLOG.md` and `TODO.md` to pick up from the last session |
+| 08:30 | `ac6f1b7` | (feature/002-3d_viewer) "how to get your lat / long easily" dialog: paste coordinates or a Google Maps link to set the location (`js/location.js`); the last location is remembered in local storage, with "Back to Newgrange" to return to the default |
+
+### decisions
+
+- **the dialog takes coordinates as well as links**: right-clicking a spot in Google Maps (on a computer) shows its
+  coordinates to copy, which is easier than finding the right link, and on a phone the Share button only gives a
+  short link that can't be read. both decimal (`53.6947, -6.4755`) and degrees / minutes / seconds
+  (`53°41'40.9"N 6°28'31.8"W`) are read
+- **which coordinates in a link win**: the pin itself (`!3d...!4d...`), then a searched / pinned place (`?q=`,
+  `?query=`, `?ll=`, `/place/...`, `/search/...`, `/dir/...`), and only then the centre of the map view (`@...`),
+  which can be some way from the pin
+- **short links (`maps.app.goo.gl`, `goo.gl/maps`)** are recognised just to explain they can't be read, and to copy
+  the full link or the coordinates instead
+- **the parser is a plain script** (`js/location.js`, like `sun.js`) so it can be tested in node without a browser
+- **only the latitude / longitude are remembered**: the date and time always start at now. the location is saved
+  whenever valid lat / long are read, so typing them by hand is remembered too
+- the dialog is a native `<dialog>` (Escape, focus and the dimmed backdrop come free); the "Google Maps" link in it
+  opens the map where the observer already is; arrow keys don't move the view while it's open
+
+### validation
+
+| what | result |
+|---|---|
+| `parseMapsLocation`, 29 cases (pin, place, search, directions, `?q=` / `?query=` links; decimal and DMS text; short links, missing / out-of-range coordinates) | all pass |
+| in the browser | pasting a Stonehenge pin link moved the observer (sunrise 5:56 UTC, as expected), survived a reload; Escape, Cancel, backdrop, Back to Newgrange, arrow keys blocked while open; phone-width layout |
+
+the test script is in this session's scratchpad (`test_location.js`), not the repo
+
+### problems hit, and lessons
+
+- **no python on this machine** (the Windows "python" is just a Microsoft Store shortcut): use node or the editor
+  for scripted edits
+- a directions link can start `/dir//53.69,...` (an empty starting point), which the first version of the path
+  pattern missed
