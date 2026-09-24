@@ -152,6 +152,9 @@ any calculation
 | 11:08 | `aa8ca2d` | moonlight (by phase and height, with soft shadows), and a brighter base night |
 | ~11:10 | | pushed `50d06b5` - `864f913` |
 | 11:16 | `dbee68b` | the moon's surface: NASA's LRO moon map (1024 x 512, 139 KB, downloaded from NASA SVS, the CGI Moon Kit), turned the right way for the observer; README credits for the viewer's third-party code and data |
+| ~11:25 | | checked the moon's tilt (it looked ~45 deg clockwise) against JPL Horizons: right to within 1.5 deg in 7 cases; the face really does tilt, e.g. ~58 deg clockwise for a full moon setting in the west from Ireland. no change |
+| ~11:30 | | pushed `dbee68b`, `c8aa443` |
+| 11:46 | *(next commit)* | reviewed the 2D calendar (index.html); the 22 findings are in `2D-REVIEW.md`, kept out of `TODO.md` (which is for the 3D viewer) for sessions on the 2D view |
 
 ### decisions
 
@@ -312,6 +315,7 @@ any calculation
 | marker details | Newgrange, from 24 Sep 2026: Midsummer sunrise Jun 21 2027 4:56am, 046° NE (a hand calculation for the latitude gives 46.2°); Midwinter sunrise Dec 21 2026 8:41am, 131° SE; both equinoxes 089° E, spring first (the autumn one was the day before); Samhain Nov 7 / Imbolc Feb 4, 117° ESE; moonrise matches the observer panel's; minor standstill last Oct 2015, next May 2034. hover / click to pin / click elsewhere / Escape; closes when its arcs are switched off; phone width, tapped |
 | stars | catalogue spot checks (Polaris, Sirius, Vega, Betelgeuse, Rigel, Arcturus: positions and colours); `precessionMatrix` reproduces Meeus example 21.b to 0.00"; the sky rotation matches `equatorialToHorizontal` to 1e-13 deg (every 97th star, 4 places, 4 dates); Polaris at the latitude; in the browser, the Plough's stars within a few pixels of their predicted screen positions (Newgrange, 10 Oct 2026 23:00); twilight fade at sun -8 / -13 / -17 deg; fewer stars at full moon |
 | Milky Way | the equatorial -> galactic matrix gives the galactic centre l = 0, b = 0 and the pole b = 90 exactly; Deneb and Sirius match the catalogue's own galactic coordinates; in the browser (Newgrange, 10 Oct 2026 23:00) the band rises at about 245 deg in the WSW (predicted 245-248, Aquila) with the rift splitting it, and comes down fainter at about 64 deg ENE (predicted 58-62, Perseus / Auriga) |
+| moon tilt vs JPL Horizons | the viewer's angle of the moon's north from straight up against JPL's north pole position angle plus the parallactic angle, 7 cases (full moon SE / rising E / setting W, crescent setting SW, gibbous S, tonight SE; Sydney): all within 0.5-1.5 deg (the approximation of the moon's axis by the ecliptic pole, and no libration) |
 | moon surface | the map's landmarks where they should be (Tycho ~11 W 44 S, Crisium ~59 E 18 N); full moon from Newgrange (Imbrium upper left, Crisium right, Tycho below), a waxing crescent showing Crisium in its sliver, a gibbous moon; from Sydney upside down (Tycho at the top) |
 | seasonal ground | Newgrange at 1pm on 21 Dec, 5 May, 21 Jun, 20 Aug, 7 Nov: dull grey-green with more bare ground / most vivid / rich green / drier olive-yellow / tawny; Sydney on 21 Jun looks like midwinter; Singapore a mild green |
 
