@@ -36,3 +36,16 @@ function calcSunPosition(date, latitude, longitude) {
     pos.altitude += atmosphericRefraction(pos.altitude);
     return pos;
 }
+
+// sunrise and sunset on the observer's local day (or the day starting at dayStart, in ms, if given).
+// as in almanacs, the sun rises / sets when its upper edge touches the horizon: its centre is then
+// 0.833 deg below it (half its width plus the lift from refraction)
+function calcSunRiseSet(date, latitude, longitude, dayStart) {
+    var day = (dayStart === undefined) ? localDayWindow(date, longitude) : [dayStart, dayStart + 86400000];
+    var altitudeAt = function(t) {
+        var d = new Date(t);
+        var eq = calcSunEquatorial(d);
+        return equatorialToHorizontal(eq.ra, eq.dec, d, latitude, longitude).altitude;
+    };
+    return findHorizonCrossings(altitudeAt, -0.8333, day[0], day[1]);
+}

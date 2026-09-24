@@ -292,3 +292,25 @@ function calcNextStandstill(date, type) {
     }
     return jdToDate(2451545.0 + (T * 36525));
 }
+
+// moonrise and moonset on the observer's local day (or the day starting at dayStart, in ms, if given).
+// the moon rises / sets when its upper edge touches the horizon; allowing for its size, refraction and
+// parallax, that's when its geocentric centre is at 0.7275 x its horizontal parallax - 0.5667 deg
+// (Meeus chapter 15). it doesn't rise or set every day: once a month or so one of them is missing
+function calcMoonRiseSet(date, latitude, longitude, dayStart) {
+    var day = (dayStart === undefined) ? localDayWindow(date, longitude) : [dayStart, dayStart + 86400000];
+    var h0At = function(distance) {
+        return (0.7275 * Math.asin(EARTH_RADIUS_KM / distance) * 180 / Math.PI) - 0.5667;
+    };
+    var moonAt = function(t) {
+        var d = new Date(t);
+        var eq = calcMoonEquatorial(d);
+        return { altitude: equatorialToHorizontal(eq.ra, eq.dec, d, latitude, longitude).altitude, h0: h0At(eq.distance) };
+    };
+    // the threshold varies slightly with the moon's distance, so compare against it at each moment
+    var aboveThreshold = function(t) {
+        var m = moonAt(t);
+        return m.altitude - m.h0;
+    };
+    return findHorizonCrossings(aboveThreshold, 0, day[0], day[1]);
+}

@@ -86,3 +86,57 @@ function equatorialToHorizontal(ra, dec, date, latitude, longitude) {
 
     return { azimuth: ((azimuth % 360) + 360) % 360, altitude: altitude };
 }
+
+// rising and setting
+
+// the local day containing the given moment, as [start, end) in ms: midnight to midnight in local mean solar
+// time at the given longitude (degrees, east positive), which is close to local clock time anywhere
+function localDayWindow(date, longitude) {
+    var offset = (longitude / 15) * 3600000; // local mean solar time is ahead of UTC by this much
+    var local = date.getTime() + offset;
+    var start = (Math.floor(local / 86400000) * 86400000) - offset;
+    return [start, start + 86400000];
+}
+
+// finds when altitudeAt(t) (degrees, t in ms) crosses h0 between start and end:
+// { rise, set } as Dates (either can be null if it doesn't happen in the window),
+// plus alwaysAbove / alwaysBelow when it never crosses (e.g. midnight sun, polar night)
+function findHorizonCrossings(altitudeAt, h0, start, end) {
+    var STEP = 10 * 60000;
+    var result = { rise: null, set: null, alwaysAbove: false, alwaysBelow: false };
+
+    // the moment within a minute between t1 and t2 when the altitude crosses h0
+    var refine = function(t1, t2) {
+        var above1 = altitudeAt(t1) > h0;
+        while(t2 - t1 > 60000) {
+            var mid = (t1 + t2) / 2;
+            if((altitudeAt(mid) > h0) == above1) {
+                t1 = mid;
+            } else {
+                t2 = mid;
+            }
+        }
+        return new Date(Math.round(((t1 + t2) / 2) / 60000) * 60000);
+    };
+
+    var prevT = start;
+    var prevAbove = altitudeAt(start) > h0;
+    var anyAbove = prevAbove, anyBelow = !prevAbove;
+    for(var t = start + STEP; t <= end; t += STEP) {
+        var tt = Math.min(t, end);
+        var above = altitudeAt(tt) > h0;
+        anyAbove = anyAbove || above;
+        anyBelow = anyBelow || !above;
+        if(above && !prevAbove && !result.rise) {
+            result.rise = refine(prevT, tt);
+        } else if(!above && prevAbove && !result.set) {
+            result.set = refine(prevT, tt);
+        }
+        prevT = tt;
+        prevAbove = above;
+    }
+
+    result.alwaysAbove = anyAbove && !anyBelow;
+    result.alwaysBelow = anyBelow && !anyAbove;
+    return result;
+}

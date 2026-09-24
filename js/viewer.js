@@ -1001,16 +1001,38 @@ function onObserverChange(obs) {
     // calcSunPosition and calcMoonPosition are from sun.js and moon.js, loaded as regular scripts before this module
     var sun = calcSunPosition(obs.date, obs.lat, obs.lon);
     setSun(sun.azimuth, sun.altitude);
-    document.getElementById('sunPosition').textContent = formatSkyPosition(sun);
+    // calcSunRiseSet / calcMoonRiseSet give the times on the observer's local day
+    document.getElementById('sunPosition').textContent = formatSkyPosition(sun) + ' | ' + formatRiseSet(calcSunRiseSet(obs.date, obs.lat, obs.lon));
     setSunArcs(obs);
 
     var moonPos = calcMoonPosition(obs.date, obs.lat, obs.lon);
     setMoon(moonPos.azimuth, moonPos.altitude, moonPos.diameter);
-    document.getElementById('moonPosition').textContent = formatSkyPosition(moonPos);
+    document.getElementById('moonPosition').textContent = formatSkyPosition(moonPos) + ' | ' + formatRiseSet(calcMoonRiseSet(obs.date, obs.lat, obs.lon));
     setMoonArcs(obs);
 
     var phase = calcMoonIllumination(obs.date);
     document.getElementById('moonPhase').textContent = phase.name + ' · ' + Math.round(phase.illumination * 100) + '% lit';
+}
+
+// e.g. "Rise: 6:13am | Set: 6:22pm" (UTC, like the observer's time), with "none" for a missing event
+// (the moon skips a rise or set about once a month) and "up / down all day" where it never crosses the horizon
+function formatRiseSet(times) {
+    if(times.alwaysAbove) {
+        return 'Up all day';
+    }
+    if(times.alwaysBelow) {
+        return 'Down all day';
+    }
+    return 'Rise: ' + formatClockTime(times.rise) + ' | Set: ' + formatClockTime(times.set);
+}
+
+// e.g. "6:13am", in UTC
+function formatClockTime(date) {
+    if(!date) {
+        return 'none';
+    }
+    var hours = date.getUTCHours();
+    return ((hours % 12) || 12) + ':' + ('0' + date.getUTCMinutes()).slice(-2) + (hours < 12 ? 'am' : 'pm');
 }
 
 // e.g. "174° S · 36° above the horizon"
