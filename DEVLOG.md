@@ -141,6 +141,9 @@ any calculation
 | 10:22 | `de30c8e` | colour variation: lush / dry grass, clumps, damper dips, patches of bare earth and stone, and a fine grain texture; the colour mix per vertex kept apart from the palette, ready for the seasons |
 | ~10:24 | | pushed `f278238` - `5727a3a` |
 | 10:28 | `2db2c6d` | seasonal ground colours: eight looks through the year (solstices, equinoxes, fire festivals) blended by the sun's position, flipped for the southern hemisphere, mild near the equator |
+| ~10:29 | | pushed `2db2c6d`, `f66d0d7` |
+| 10:34 | `daeb503` | TODO: sharable links (place and time in the URL) |
+| 10:42 | `7f514dc` | the eight direction columns replaced by rough standing stones |
 
 ### decisions
 
@@ -244,6 +247,14 @@ any calculation
 - the southern hemisphere is six months on (longitude + 180); within ~10-30 deg of the equator it blends to a mild
   all-year green. the ground is recoloured only when the sun has moved a degree (about a day) or the latitude
   changes; the noise values per vertex are kept, so recolouring is quick
+- **the stones are generated, not model files**: each from its own fixed seed, so the same eight stones every time
+  (effectively permanent shapes). generating them takes about a millisecond; model files would need a loader and
+  downloads, with no gain, and would be harder to tweak. a hand-made model could still replace one later
+- **stone shape**: rings of a rounded-box outline (a superellipse, between an ellipse and a box), wider at a flared
+  base and narrowing to 55-75% at the top, which is blunt (rounded off only over the last 7%) and sloping; lumps
+  from 3D noise, a slight lean and twist; set 20 cm into the ground. broad faces towards the centre, as in stone
+  circles. cardinal stones ~2.3-2.65 m tall, the others ~1.5-1.85 m. flat shading, vertex colours: grey with
+  lichen patches (more higher up) and a darker, damp foot
 
 ### validation
 
@@ -278,6 +289,11 @@ the test scripts are in this session's scratchpad (`test_location.js`, `test_sta
   together, before any frame is drawn, so "the view didn't turn" proved nothing (the first check that the dialog
   blocks the arrow keys was like this). hold the key with a `keydown` event, take a couple of screenshots (each forces
   a frame while the preview pane is hidden, when no frames are drawn otherwise), then send the `keyup`
+- **walking in the test browser is unreliable**: how many frames each screenshot draws varies, so holding a key
+  for a number of screenshots goes an unpredictable distance (it walked straight through a stone, then far past
+  it). for close-up checks, a temporary `window.__debugView` hook (camera, setHeading, setPitch) placed the camera
+  directly; removed before committing
+- the stones' triangles were first wound the wrong way (facing inwards); worked out by hand before testing
 - **estimated times in the DEVLOG drift**: several rows written from memory were minutes out, and three were 30-55
   minutes out; take them from `git log --date=format:%H:%M` (and `date`) instead
 - a directions link can start `/dir//53.69,...` (an empty starting point), which the first version of the path
