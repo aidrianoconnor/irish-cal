@@ -316,7 +316,17 @@ function setSun(azimuth, altitude) {
     sunLight.intensity = 1.4 * THREE.MathUtils.smoothstep(altitude, -2, 6); // fades out as the sun sets
 
     moon.material.uniforms.daylight.value = daylight;
+
+    // the haze takes the sky's colour at the horizon, as the sky shader works it out: night to day, plus the
+    // twilight glow averaged all the way round (it's strongest on the sun's side)
+    var sky = skyDome.material.uniforms;
+    var sunHeight = direction.y;
+    var twilight = THREE.MathUtils.smoothstep(sunHeight, -0.3, -0.03) * (1 - THREE.MathUtils.smoothstep(sunHeight, 0, 0.25));
+    hazeColor.lerpColors(sky.nightHorizon.value, sky.dayHorizon.value, daylight);
+    hazeColor.add(hazeGlow.copy(sky.twilightGlow.value).multiplyScalar(twilight * 0.31));
+    scene.fog.color.setRGB(hazeColor.r, hazeColor.g, hazeColor.b, THREE.SRGBColorSpace); // (the sky's colours are sRGB)
 }
+var hazeColor = new THREE.Color(), hazeGlow = new THREE.Color();
 
 // the moon: a ball lit from the sun's direction, so it shows the right phase (and the lit side
 // points towards the sun) without any phase calculations. it has its own shading rather than
@@ -562,7 +572,8 @@ function makeSkyLabel(text, color, heightDeg, opacity) {
     var texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
     // labels are mostly transparent, so they mustn't hide what's behind them from the depth buffer
-    var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: opacity, depthWrite: false }));
+    // (not faded by the haze over the ground: they're in the sky)
+    var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: opacity, depthWrite: false, fog: false }));
     var height = MARKER_DISTANCE * Math.tan(THREE.MathUtils.degToRad(heightDeg));
     sprite.scale.set(height * canvas.width / canvas.height, height, 1);
     return sprite;
@@ -581,7 +592,7 @@ function makeHorizonMarker(group, text, color, labelAltitude, opacity) {
     // the tick starts a little below the horizon so it meets the edge of the plain
     var tick = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, markerHeight(-2), -MARKER_DISTANCE), new THREE.Vector3()]),
-        new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: opacity * 0.7 })
+        new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: opacity * 0.7, fog: false })
     );
     marker.add(tick);
 
@@ -730,7 +741,7 @@ var moonPathLines = [];
 function makeMoonPathLine(points, opacity) {
     var geometry = new LineGeometry();
     geometry.setPositions(points);
-    var material = new LineMaterial({ color: MOON_PATH_COLOR, linewidth: 2.2, transparent: true, opacity: opacity, depthWrite: false });
+    var material = new LineMaterial({ color: MOON_PATH_COLOR, linewidth: 2.2, transparent: true, opacity: opacity, depthWrite: false, fog: false });
     material.resolution.set(window.innerWidth, window.innerHeight);
     var line = new Line2(geometry, material);
     line.computeLineDistances();
@@ -958,12 +969,59 @@ function setMoon(azimuth, altitude, diameter) {
 }
 
 
-var ground = new THREE.Mesh(
-    new THREE.CircleGeometry(GROUND_RADIUS, 128),
-    new THREE.MeshStandardMaterial({ color: '#3f8a34', roughness: 1 })
-);
-ground.rotation.x = -Math.PI / 2;
+// the ground: the walkable plain (GROUND_RADIUS) carries on out to near the horizon, fading into the haze, so the
+// ground meets the sky at a true, level horizon (from eye height, a flat ground's horizon is within 0.05 deg of
+// level, and the arcs and markers assume a level horizon). it's made of rings of vertices, close together near the
+// centre and further apart out towards the horizon, where the haze hides the detail
+
+var GROUND_EXTENT = 450; // inside the sky dome
+var GROUND_RINGS = 140;
+var GROUND_SEGMENTS = 256;
+var GROUND_RING_GROWTH = 0.035; // each ring's gap is this much wider than the last's (about 12 cm at the centre, 2 m by the plain's edge)
+
+function groundRingRadius(ring) {
+    return GROUND_EXTENT * (Math.exp(GROUND_RING_GROWTH * ring) - 1) / (Math.exp(GROUND_RING_GROWTH * GROUND_RINGS) - 1);
+}
+
+function makeGroundGeometry() {
+    // vertex 0 is the centre, then each ring's GROUND_SEGMENTS vertices; angles run from east (+x) towards north (-z),
+    // so that the triangles face up
+    var positions = [0, 0, 0];
+    for(var ring = 1; ring <= GROUND_RINGS; ring++) {
+        var radius = groundRingRadius(ring);
+        for(var seg = 0; seg < GROUND_SEGMENTS; seg++) {
+            var angle = (seg / GROUND_SEGMENTS) * Math.PI * 2;
+            positions.push(radius * Math.cos(angle), 0, -radius * Math.sin(angle));
+        }
+    }
+    var vertex = function(ring, seg) {
+        return ring == 0 ? 0 : 1 + ((ring - 1) * GROUND_SEGMENTS) + (seg % GROUND_SEGMENTS);
+    };
+    var indices = [];
+    for(var seg2 = 0; seg2 < GROUND_SEGMENTS; seg2++) {
+        indices.push(0, vertex(1, seg2), vertex(1, seg2 + 1));
+    }
+    for(var r = 1; r < GROUND_RINGS; r++) {
+        for(var s = 0; s < GROUND_SEGMENTS; s++) {
+            indices.push(vertex(r, s), vertex(r + 1, s), vertex(r + 1, s + 1));
+            indices.push(vertex(r, s), vertex(r + 1, s + 1), vertex(r, s + 1));
+        }
+    }
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    return geometry;
+}
+
+var ground = new THREE.Mesh(makeGroundGeometry(), new THREE.MeshStandardMaterial({ color: '#3f8a34', roughness: 1 }));
 scene.add(ground);
+
+// the haze: the ground fades into the colour of the sky at the horizon with distance, as far-off land does through
+// the air. its colour follows the sky's (set by setSun); the sky itself, the sun, moon, stars and the sky's labels
+// and arcs aren't affected
+var HAZE_START = 30;
+scene.fog = new THREE.Fog('#000000', HAZE_START, GROUND_EXTENT);
 
 // direction columns and labels
 
