@@ -139,6 +139,8 @@ any calculation
 | 10:19 | `f278238` | the ground carries on out to near the horizon (450 m, as rings of vertices, denser near the centre), with a haze fading it into the sky's horizon colour |
 | 10:20 | `e5a9b81` | gentle unevenness (up to about 20 cm): flat at the Reset point, level again towards the horizon; columns and eye height follow the ground |
 | 10:22 | `de30c8e` | colour variation: lush / dry grass, clumps, damper dips, patches of bare earth and stone, and a fine grain texture; the colour mix per vertex kept apart from the palette, ready for the seasons |
+| ~10:24 | | pushed `f278238` - `5727a3a` |
+| 10:28 | `2db2c6d` | seasonal ground colours: eight looks through the year (solstices, equinoxes, fire festivals) blended by the sun's position, flipped for the southern hemisphere, mild near the equator |
 
 ### decisions
 
@@ -233,6 +235,15 @@ any calculation
   palette applied by `colourGround`, so the seasons only need a new palette. the fine grain is a 128 px canvas
   tile over 4 m, with speckles of ~3 and ~12 cm (1 cm speckles averaged away to flat grey), multiplied over the
   colours
+- **seasons by the sun, keyed to the festivals**: the ground's look is set at the eight points of the year (the
+  solstices, equinoxes and fire festivals, by the sun's ecliptic longitude, as for the arcs) and blended between
+  them, so it follows the solar year rather than calendar months, and the grass's lag behind the sun is built in:
+  freshest around Bealtaine, driest after Lúnasa, dullest with the most bare, wet ground through the winter. Irish
+  grass stays green all year, so no literal grey / orange: the grass colours, a lean towards the dry grass, how far
+  the earth and stone patches spread (their thresholds lowered) and the earth's colour (darker when wet) change
+- the southern hemisphere is six months on (longitude + 180); within ~10-30 deg of the equator it blends to a mild
+  all-year green. the ground is recoloured only when the sun has moved a degree (about a day) or the latitude
+  changes; the noise values per vertex are kept, so recolouring is quick
 
 ### validation
 
@@ -248,6 +259,7 @@ any calculation
 | marker details | Newgrange, from 24 Sep 2026: Midsummer sunrise Jun 21 2027 4:56am, 046° NE (a hand calculation for the latitude gives 46.2°); Midwinter sunrise Dec 21 2026 8:41am, 131° SE; both equinoxes 089° E, spring first (the autumn one was the day before); Samhain Nov 7 / Imbolc Feb 4, 117° ESE; moonrise matches the observer panel's; minor standstill last Oct 2015, next May 2034. hover / click to pin / click elsewhere / Escape; closes when its arcs are switched off; phone width, tapped |
 | stars | catalogue spot checks (Polaris, Sirius, Vega, Betelgeuse, Rigel, Arcturus: positions and colours); `precessionMatrix` reproduces Meeus example 21.b to 0.00"; the sky rotation matches `equatorialToHorizontal` to 1e-13 deg (every 97th star, 4 places, 4 dates); Polaris at the latitude; in the browser, the Plough's stars within a few pixels of their predicted screen positions (Newgrange, 10 Oct 2026 23:00); twilight fade at sun -8 / -13 / -17 deg; fewer stars at full moon |
 | Milky Way | the equatorial -> galactic matrix gives the galactic centre l = 0, b = 0 and the pole b = 90 exactly; Deneb and Sirius match the catalogue's own galactic coordinates; in the browser (Newgrange, 10 Oct 2026 23:00) the band rises at about 245 deg in the WSW (predicted 245-248, Aquila) with the rift splitting it, and comes down fainter at about 64 deg ENE (predicted 58-62, Perseus / Auriga) |
+| seasonal ground | Newgrange at 1pm on 21 Dec, 5 May, 21 Jun, 20 Aug, 7 Nov: dull grey-green with more bare ground / most vivid / rich green / drier olive-yellow / tawny; Sydney on 21 Jun looks like midwinter; Singapore a mild green |
 
 the test scripts are in this session's scratchpad (`test_location.js`, `test_stars.js`, `build_stars.js`), not the repo
 
