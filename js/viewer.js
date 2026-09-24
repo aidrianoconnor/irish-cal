@@ -1383,6 +1383,108 @@ for(var i = 0; i < DIRECTIONS.length; i++) {
     scene.add(makeDirectionMarker(DIRECTIONS[i]));
 }
 
+// scattered detail on the ground, for a sense of scale: rocks (and tussocks, below). placed from fixed seeds, so the
+// same everywhere every time, and drawn as instances (one shape, drawn many times) so that hundreds cost little
+
+// a repeatable sequence of random numbers from 0 to 1 (mulberry32), for placing things
+function seededRandom(seed) {
+    return function() {
+        seed = (seed + 0x6D2B79F5) | 0;
+        var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+// whether a spot is clear, for something of the given size, of the Reset point (by a few metres, more for bigger
+// things) and the standing stones
+function clearOfStones(x, z, size) {
+    if(Math.sqrt((x * x) + (z * z)) < 3 + (3 * size)) {
+        return false;
+    }
+    for(var d = 0; d < DIRECTIONS.length; d++) {
+        var pos = azimuthToXZ(DIRECTIONS[d].azimuth, COLUMN_DISTANCE);
+        if(Math.hypot(x - pos.x, z - pos.z) < 1.5 + size) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// rocks: a few lumpy shapes (a rough ball, flattened, with lumps from noise and the stones' colouring), each drawn
+// at many places, sizes and turns, partly sunk into the ground. they gather where the ground has stony patches,
+// with a few scattered everywhere; mostly small, with the odd boulder
+var ROCK_SHAPES = 4;
+var ROCK_TRIES = 9000; // places considered; about 1,000 end up with a rock
+var ROCK_REACH = 70; // metres from the centre (beyond, the haze hides them)
+
+function makeRockGeometry(seed) {
+    var geometry = new THREE.IcosahedronGeometry(1, 2);
+    var positions = geometry.attributes.position;
+    var colors = [];
+    var color = new THREE.Color();
+    var flatten = 0.45 + (0.25 * stoneRandom(seed, 20));
+    for(var i = 0; i < positions.count; i++) {
+        var x = positions.getX(i), y = positions.getY(i), z = positions.getZ(i);
+        var lump = 1 + (0.45 * (stoneNoise((x * 1.3) + seed, y * 1.3, z * 1.3, seed) - 0.5)) + (0.2 * (stoneNoise(x * 3, y * 3, z * 3, seed + 5) - 0.5));
+        positions.setXYZ(i, x * lump, y * lump * flatten, z * lump);
+        var lichen = THREE.MathUtils.smoothstep(stoneNoise(x * 2.5, y * 2.5, z * 2.5, seed + 50), 0.6, 0.75) * THREE.MathUtils.smoothstep(y, 0, 0.8);
+        color.copy(STONE_COLORS.rock).multiplyScalar(0.85 + (0.3 * stoneNoise(x * 5, y * 5, z * 5, seed + 70)));
+        color.lerp(STONE_COLORS.lichen, 0.6 * lichen).lerp(STONE_COLORS.damp, 0.7 * (1 - THREE.MathUtils.smoothstep(y, -0.3, 0.2)));
+        colors.push(color.r, color.g, color.b);
+    }
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.computeVertexNormals();
+    return { geometry: geometry, flatten: flatten };
+}
+
+function scatterRocks() {
+    var random = seededRandom(1234);
+    var shapes = [];
+    for(var s = 0; s < ROCK_SHAPES; s++) {
+        shapes.push(makeRockGeometry(200 + s));
+    }
+    var placed = shapes.map(function() { return []; });
+    for(var t = 0; t < ROCK_TRIES; t++) {
+        // spread evenly over the area, then kept more often where the ground's stony patches are
+        var r = ROCK_REACH * Math.sqrt(random()), a = random() * Math.PI * 2;
+        var x = r * Math.cos(a), z = r * Math.sin(a);
+        var stony = THREE.MathUtils.smoothstep(groundMix(x, z).stone, 0.62, 0.8);
+        var size = 0.1 + (0.4 * Math.pow(random(), 2));
+        if(random() < 0.03) {
+            size = 0.6 + (0.4 * random()); // the odd boulder
+        }
+        var keep = random() < 0.06 + (0.8 * stony);
+        if(!keep || (r > 50 && size < 0.25) || !clearOfStones(x, z, size)) {
+            continue; // (small rocks far off would only flicker)
+        }
+        placed[Math.floor(random() * ROCK_SHAPES)].push({ x: x, z: z, size: size, turn: random() * Math.PI * 2, tilt: 0.3 * (random() - 0.5), tint: 0.62 + (0.3 * random()) });
+    }
+
+    var material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
+    var matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), euler = new THREE.Euler(), color = new THREE.Color();
+    var count = 0;
+    shapes.forEach(function(shape, s) {
+        var rocks = placed[s];
+        var mesh = new THREE.InstancedMesh(shape.geometry, material, rocks.length);
+        rocks.forEach(function(rock, i) {
+            // sunk by about a third of its height, so it sits in the ground rather than on it
+            var y = groundHeight(rock.x, rock.z) - (0.35 * rock.size * shape.flatten);
+            rotation.setFromEuler(euler.set(rock.tilt, rock.turn, rock.tilt * 0.5));
+            matrix.compose(new THREE.Vector3(rock.x, y, rock.z), rotation, new THREE.Vector3(rock.size, rock.size, rock.size));
+            mesh.setMatrixAt(i, matrix);
+            mesh.setColorAt(i, color.setScalar(rock.tint));
+        });
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        scene.add(mesh);
+        count += rocks.length;
+    });
+    return count;
+}
+
+var rockCount = scatterRocks();
+
 // turning and moving
 
 var heading = 0;
