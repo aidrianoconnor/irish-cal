@@ -160,6 +160,8 @@ any calculation
 | 12:02 | `246b4ec` | the about dialog without the arcs' colour key; its closing note now explains the fire festivals are the solar midpoints, not their traditional 1st of the month, and that the Observer date can be set to the 1st to see those |
 | ~12:03 | | pushed `a8f04b6` - `173f124` |
 | 14:34 | `8084257` | sharable links: the place (and the moment, once chosen) in the page's address; opening a link doesn't replace the remembered place; a copy-link button |
+| ~14:40 | | pushed `8084257` - `3b9eede`; the preview server had been stopped by the app again: restarted |
+| 16:16 | `527afec` | a start script: `tools/serve.js` (a tiny Node.js server) with `start.cmd` / `start.sh`; the preview (`.claude/launch.json`, outside the repo) now runs it instead of the old scratchpad copy |
 
 ### decisions
 
@@ -230,6 +232,14 @@ any calculation
   only once the visitor changes the place; a link's time zone was never saved (only a change of the dropdown is)
 - the copy button uses the clipboard API, falling back to copying from a hidden text box (`execCommand('copy')`):
   the app's embedded test browser refused the clipboard API even for a real click, but the fallback worked
+- **the start script**: `tools/serve.js`, Node.js only (no dependencies): serves the repo on 127.0.0.1 (this computer
+  only), port 8317 or the next free one (up to 20 tries), GET / HEAD only, uncached (`no-store`), proper content
+  types (the old scratchpad server had none for .jpg), and only files inside the folder (checked with
+  `path.relative`: the old `startsWith` check would have let a sibling folder with the same prefix through).
+  `--open` opens the 3D viewer. `start.cmd` (Windows: says where to get Node.js if it's missing, and keeps its
+  window open to read it) and `start.sh` (Mac / Linux: falls back to `python3 -m http.server`); `.gitattributes`
+  keeps `.sh` LF and `.cmd` CRLF on any machine; `start.sh` is stored executable. the preview's `.claude/launch.json`
+  (outside the repo) now runs the repo's server, so it no longer depends on an old session's scratchpad
 - **real stars rather than fake ones**: the stars are fixed on the celestial sphere, which turns as one, so a single
   rotation (precession from J2000 to the date, the local sidereal time, then the latitude) places them all, using
   the sidereal time the sun and moon already needed. a fake field would have been barely less work and wouldn't
@@ -361,6 +371,9 @@ the test scripts are in this session's scratchpad (`test_location.js`, `test_sta
   for a number of screenshots goes an unpredictable distance (it walked straight through a stone, then far past
   it). for close-up checks, a temporary `window.__debugView` hook (camera, setHeading, setPitch) placed the camera
   directly; removed before committing
+- **a callback given to each `server.listen()` attempt stays attached after the attempt fails**, so when the next
+  port worked, both fired: it printed the busy port's addresses too (and would have opened the browser twice). found
+  by running it for 3 s while the preview had 8317; now one `listening` handler reads `server.address().port`
 - **`top` is a built-in browser global** (`window.top`, read-only): a test script's `var top = ...` silently kept the
   window object, which looked like a failure in the page. use other names in page scripts
 - opening a modal dialog focuses its first button, scrolling a long dialog to the bottom: focus the chosen button
