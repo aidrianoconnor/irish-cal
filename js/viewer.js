@@ -23,6 +23,8 @@ var MOON_DISTANCE = 400; // inside the sky dome
 var SUMMER_ARC_COLOR = '#ffc94d'; // warm gold
 var WINTER_ARC_COLOR = '#a9c6ff'; // cool silver-blue
 var TODAY_ARC_COLOR = '#ffffff';
+var FESTIVAL_ARC_COLOR = '#ff8a3d'; // ember orange
+var EQUINOX_ARC_COLOR = '#d6e4d2'; // soft pale green-grey
 var MARKER_DISTANCE = 300; // horizon markers sit in the sky, inside the moon's distance
 var MOON_SIZE_SCALE = 6; // the real moon (about 0.5 deg across) is drawn this many times larger so it's easy to see
 
@@ -99,6 +101,9 @@ var SKY_FRAGMENT_SHADER = [
     'uniform vec3 summerArcColor;',
     'uniform vec3 winterArcColor;',
     'uniform vec3 todayArcColor;',
+    'uniform float festivalDeclination;', // degrees: the Bealtaine / Lúnasa arc (Samhain / Imbolc is the same, south)
+    'uniform vec3 festivalArcColor;',
+    'uniform vec3 equinoxArcColor;',
     'varying vec3 vDirection;',
     '',
     // how much the atmosphere lifts things near the horizon (degrees), Bennett's formula as in astro.js
@@ -154,6 +159,13 @@ var SKY_FRAGMENT_SHADER = [
     '    float aboveHorizon = smoothstep(-0.5, 0.0, apparentAlt);',
     '    float summerArc = 0.45 * line(declination, arcDeclinations.x, degPerPixel, 0.6);',
     '    float winterArc = 0.45 * line(declination, arcDeclinations.y, degPerPixel, 0.6);',
+    // the fire festival arcs are fainter and dashed (dashes 3 deg of hour angle long), the equinox arc faint and thin
+    '    float dash = step(0.5, fract(hourAngle / 6.0));',
+    '    float festivalArc = 0.4 * dash * max(line(declination, festivalDeclination, degPerPixel, 0.6),',
+    '                                         line(declination, -festivalDeclination, degPerPixel, 0.6));',
+    '    float equinoxArc = 0.3 * line(declination, 0.0, degPerPixel, 0.5);',
+    '    color = mix(color, equinoxArcColor, equinoxArc * aboveHorizon);',
+    '    color = mix(color, festivalArcColor, festivalArc * aboveHorizon);',
     // today's arc is stronger, and brighter along the part of the path the sun has still to travel
     '    float ahead = smoothstep(-0.5, 0.5, hourAngle - sunHourAngle);',
     '    float todayArc = mix(0.5, 0.9, ahead) * line(declination, arcDeclinations.z, degPerPixel, 1.1);',
@@ -188,7 +200,10 @@ function makeSkyDome() {
             sunHourAngle: { value: 0 },
             summerArcColor: { value: srgbColor(SUMMER_ARC_COLOR) },
             winterArcColor: { value: srgbColor(WINTER_ARC_COLOR) },
-            todayArcColor: { value: srgbColor(TODAY_ARC_COLOR) }
+            todayArcColor: { value: srgbColor(TODAY_ARC_COLOR) },
+            festivalDeclination: { value: 0 },
+            festivalArcColor: { value: srgbColor(FESTIVAL_ARC_COLOR) },
+            equinoxArcColor: { value: srgbColor(EQUINOX_ARC_COLOR) }
         },
         vertexShader: SKY_VERTEX_SHADER,
         fragmentShader: SKY_FRAGMENT_SHADER,
@@ -361,13 +376,23 @@ function setMarkerAzimuth(marker, azimuth) {
 var horizonMarkers = new THREE.Group();
 scene.add(horizonMarkers);
 
+// the labels sit in three rows so that neighbouring markers (as little as ~15 deg apart) don't overlap:
+// solstices and equinoxes, today, then the fire festivals
+var MARKER_ROWS = { seasons: 8, today: 11.2, festivals: 14.4 };
+
 var markers = {
-    summerRise: makeHorizonMarker('Midsummer sunrise', SUMMER_ARC_COLOR, 8, 0.75),
-    summerSet: makeHorizonMarker('Midsummer sunset', SUMMER_ARC_COLOR, 8, 0.75),
-    winterRise: makeHorizonMarker('Midwinter sunrise', WINTER_ARC_COLOR, 8, 0.75),
-    winterSet: makeHorizonMarker('Midwinter sunset', WINTER_ARC_COLOR, 8, 0.75),
-    todayRise: makeHorizonMarker('Sunrise', TODAY_ARC_COLOR, 11, 0.95),
-    todaySet: makeHorizonMarker('Sunset', TODAY_ARC_COLOR, 11, 0.95)
+    summerRise: makeHorizonMarker('Midsummer sunrise', SUMMER_ARC_COLOR, MARKER_ROWS.seasons, 0.75),
+    summerSet: makeHorizonMarker('Midsummer sunset', SUMMER_ARC_COLOR, MARKER_ROWS.seasons, 0.75),
+    winterRise: makeHorizonMarker('Midwinter sunrise', WINTER_ARC_COLOR, MARKER_ROWS.seasons, 0.75),
+    winterSet: makeHorizonMarker('Midwinter sunset', WINTER_ARC_COLOR, MARKER_ROWS.seasons, 0.75),
+    equinoxRise: makeHorizonMarker('Equinox sunrise', EQUINOX_ARC_COLOR, MARKER_ROWS.seasons, 0.6),
+    equinoxSet: makeHorizonMarker('Equinox sunset', EQUINOX_ARC_COLOR, MARKER_ROWS.seasons, 0.6),
+    brightHalfRise: makeHorizonMarker('Bealtaine / Lúnasa sunrise', FESTIVAL_ARC_COLOR, MARKER_ROWS.festivals, 0.7),
+    brightHalfSet: makeHorizonMarker('Bealtaine / Lúnasa sunset', FESTIVAL_ARC_COLOR, MARKER_ROWS.festivals, 0.7),
+    darkHalfRise: makeHorizonMarker('Samhain / Imbolc sunrise', FESTIVAL_ARC_COLOR, MARKER_ROWS.festivals, 0.7),
+    darkHalfSet: makeHorizonMarker('Samhain / Imbolc sunset', FESTIVAL_ARC_COLOR, MARKER_ROWS.festivals, 0.7),
+    todayRise: makeHorizonMarker('Sunrise', TODAY_ARC_COLOR, MARKER_ROWS.today, 0.95),
+    todaySet: makeHorizonMarker('Sunset', TODAY_ARC_COLOR, MARKER_ROWS.today, 0.95)
 };
 
 // azimuth (degrees) where a point at the given declination rises, as seen from the given latitude,
@@ -401,13 +426,23 @@ function setSunArcs(obs) {
     // the sun's hour angle: 0 at solar noon, negative before, positive after
     var hourAngle = (((greenwichSiderealTime(obs.date) + obs.lon - sun.ra) % 360) + 540) % 360 - 180;
 
+    // the fire festivals, taken as the solar midpoints between the solstices and equinoxes: the sun is
+    // 45 deg along the ecliptic from an equinox, so its declination is asin(sin(tilt) * sin(45 deg)), about 16.3 deg.
+    // Bealtaine and Lúnasa share the northern arc, Samhain and Imbolc the southern one (whichever hemisphere
+    // the observer is in, as the festivals are dates rather than local seasons)
+    var festival = THREE.MathUtils.radToDeg(Math.asin(Math.sin(THREE.MathUtils.degToRad(tilt)) * Math.SQRT1_2));
+
     var uniforms = skyDome.material.uniforms;
     uniforms.latitude.value = THREE.MathUtils.degToRad(obs.lat);
     uniforms.arcDeclinations.value.set(summer, -summer, sun.dec);
+    uniforms.festivalDeclination.value = festival;
     uniforms.sunHourAngle.value = hourAngle;
 
     setArcMarkers(markers.summerRise, markers.summerSet, summer, obs.lat);
     setArcMarkers(markers.winterRise, markers.winterSet, -summer, obs.lat);
+    setArcMarkers(markers.equinoxRise, markers.equinoxSet, 0, obs.lat);
+    setArcMarkers(markers.brightHalfRise, markers.brightHalfSet, festival, obs.lat);
+    setArcMarkers(markers.darkHalfRise, markers.darkHalfSet, -festival, obs.lat);
     setArcMarkers(markers.todayRise, markers.todaySet, sun.dec, obs.lat);
 }
 
