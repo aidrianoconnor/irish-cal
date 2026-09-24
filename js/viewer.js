@@ -983,6 +983,37 @@ function groundRingRadius(ring) {
     return GROUND_EXTENT * (Math.exp(GROUND_RING_GROWTH * ring) - 1) / (Math.exp(GROUND_RING_GROWTH * GROUND_RINGS) - 1);
 }
 
+// smooth random values (value noise) on the ground, 0 to 1, the same every time for the same place and seed
+function groundHash(ix, iz, seed) {
+    var h = Math.sin((ix * 127.1) + (iz * 311.7) + (seed * 74.7)) * 43758.5453;
+    return h - Math.floor(h);
+}
+function groundNoise(x, z, seed) {
+    var ix = Math.floor(x), iz = Math.floor(z);
+    var fx = x - ix, fz = z - iz;
+    fx = fx * fx * (3 - (2 * fx));
+    fz = fz * fz * (3 - (2 * fz));
+    var a = groundHash(ix, iz, seed), b = groundHash(ix + 1, iz, seed);
+    var c = groundHash(ix, iz + 1, seed), d = groundHash(ix + 1, iz + 1, seed);
+    return THREE.MathUtils.lerp(THREE.MathUtils.lerp(a, b, fx), THREE.MathUtils.lerp(c, d, fx), fz);
+}
+
+// the ground's gentle unevenness, in metres (up to about +/-25 cm): broad swells about 16 m across, smaller ones
+// about 6 m and 2.5 m across. flat where the observer starts (the Reset point), and level again out towards the
+// horizon so that it stays level; the smallest undulations fade out first, where the rings are too far apart for them
+var GROUND_BUMP_HEIGHT = 0.25;
+function groundHeight(x, z) {
+    var r = Math.sqrt((x * x) + (z * z));
+    var fade = THREE.MathUtils.smoothstep(r, 2.5, 8) * (1 - THREE.MathUtils.smoothstep(r, 90, 220));
+    if(fade == 0) {
+        return 0;
+    }
+    var bumps = (0.5 * (groundNoise(x / 16, z / 16, 1) - 0.5))
+              + (0.35 * (groundNoise(x / 6, z / 6, 2) - 0.5))
+              + (0.15 * (groundNoise(x / 2.5, z / 2.5, 3) - 0.5) * (1 - THREE.MathUtils.smoothstep(r, 25, 50)));
+    return 2 * GROUND_BUMP_HEIGHT * bumps * fade;
+}
+
 function makeGroundGeometry() {
     // vertex 0 is the centre, then each ring's GROUND_SEGMENTS vertices; angles run from east (+x) towards north (-z),
     // so that the triangles face up
@@ -991,7 +1022,8 @@ function makeGroundGeometry() {
         var radius = groundRingRadius(ring);
         for(var seg = 0; seg < GROUND_SEGMENTS; seg++) {
             var angle = (seg / GROUND_SEGMENTS) * Math.PI * 2;
-            positions.push(radius * Math.cos(angle), 0, -radius * Math.sin(angle));
+            var x = radius * Math.cos(angle), z = -radius * Math.sin(angle);
+            positions.push(x, groundHeight(x, z), z);
         }
     }
     var vertex = function(ring, seg) {
@@ -1064,7 +1096,8 @@ function makeDirectionMarker(direction) {
     marker.add(label);
 
     var pos = azimuthToXZ(direction.azimuth, COLUMN_DISTANCE);
-    marker.position.set(pos.x, 0, pos.z);
+    // standing on the ground there, set in a little so no gap shows under it on a slope
+    marker.position.set(pos.x, groundHeight(pos.x, pos.z) - 0.05, pos.z);
     return marker;
 }
 
@@ -1125,8 +1158,7 @@ function moveObserver(distance) {
         z *= maxDistance / fromCentre;
     }
 
-    camera.position.x = x;
-    camera.position.z = z;
+    camera.position.set(x, EYE_HEIGHT + groundHeight(x, z), z); // (following the ground's rises and dips)
 }
 
 // back to the centre of the plain, looking level towards the south
