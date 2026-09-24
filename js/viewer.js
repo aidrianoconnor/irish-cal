@@ -101,13 +101,44 @@ sunLight.shadow.bias = -0.0003;
 sunLight.shadow.normalBias = 0.04; // (stops the ground shadowing itself in speckles)
 var sunDirection = new THREE.Vector3(0, 1, 0);
 
-// keeps the sun's light (and so its shadows) centred on the observer, in whole shadow-map texels so the shadows'
-// edges don't shimmer as they walk
-function placeSunLight() {
-    var texel = SHADOW_AREA / sunLight.shadow.mapSize.x;
+// keeps a light from the sky (and so its shadows) centred on the observer, in whole shadow-map texels so the
+// shadows' edges don't shimmer as they walk
+function placeSkyLight(light, direction) {
+    var texel = SHADOW_AREA / light.shadow.mapSize.x;
     var x = Math.round(camera.position.x / texel) * texel, z = Math.round(camera.position.z / texel) * texel;
-    sunLight.target.position.set(x, 0, z);
-    sunLight.position.set(x, 0, z).addScaledVector(sunDirection, SUN_LIGHT_DISTANCE);
+    light.target.position.set(x, 0, z);
+    light.position.set(x, 0, z).addScaledVector(direction, SUN_LIGHT_DISTANCE);
+}
+function placeSunLight() {
+    placeSkyLight(sunLight, sunDirection);
+    placeSkyLight(moonLight, moonDirection);
+}
+
+// moonlight: a cooler, much dimmer light from the moon's direction, by how much of it is lit (a full moon lights the
+// landscape, a thin crescent hardly at all) and how high it is, off in daylight. it casts soft shadows too, from a
+// smaller shadow map (moon shadows are soft anyway). its shadows stay switched on even when it gives no light:
+// switching them on and off would make every material's shaders recompile, a hitch each time the moon rose or set
+var MOON_LIGHT_INTENSITY = 1.6; // at full moon, well up
+var moonLight = new THREE.DirectionalLight('#c3cff0', 0);
+scene.add(moonLight);
+scene.add(moonLight.target);
+moonLight.castShadow = true;
+moonLight.shadow.mapSize.set(1024, 1024);
+moonLight.shadow.radius = 3;
+moonLight.shadow.camera.left = moonLight.shadow.camera.bottom = -SHADOW_AREA / 2;
+moonLight.shadow.camera.right = moonLight.shadow.camera.top = SHADOW_AREA / 2;
+moonLight.shadow.camera.near = 1;
+moonLight.shadow.camera.far = SUN_LIGHT_DISTANCE * 2;
+moonLight.shadow.bias = -0.0005;
+moonLight.shadow.normalBias = 0.06;
+var moonDirection = new THREE.Vector3(0, -1, 0);
+
+// (degrees; illumination 0 to 1; daylight as daylightAmount gives it)
+function setMoonLight(azimuth, altitude, illumination, daylight) {
+    moonDirection.copy(skyDirection(azimuth, altitude));
+    var brightness = Math.pow(illumination, 1.5) * THREE.MathUtils.smoothstep(altitude, -1, 10);
+    moonLight.intensity = MOON_LIGHT_INTENSITY * brightness * (1 - daylight);
+    placeSkyLight(moonLight, moonDirection);
 }
 
 // sky dome: a sphere seen from the inside, coloured by a shader from the sun's position.
@@ -325,14 +356,14 @@ function daylightAmount(sunAltitude) {
 }
 
 var DAY_AMBIENT = { sky: new THREE.Color('#cfe6ff'), ground: new THREE.Color('#3d6b2a'), intensity: 1.2 };
-var NIGHT_AMBIENT = { sky: new THREE.Color('#7385b8'), ground: new THREE.Color('#1c2430'), intensity: 0.55 };
+var NIGHT_AMBIENT = { sky: new THREE.Color('#7385b8'), ground: new THREE.Color('#1c2430'), intensity: 0.75 };
 
 // night sight: eyes adjusted to the dark can still make out the ground and the stones nearby. a dim, cool light
 // from high above the observer, fading out a little beyond the standing stones, that comes up as the daylight
 // goes. it moves with the observer (placeNightSight), so it's the same wherever they stand
 var NIGHT_SIGHT_REACH = 45; // metres: fades to nothing by here
 var NIGHT_SIGHT_HEIGHT = 10;
-var NIGHT_SIGHT_INTENSITY = 7;
+var NIGHT_SIGHT_INTENSITY = 10;
 var nightSight = new THREE.PointLight('#a8b8e0', 0, NIGHT_SIGHT_REACH, 1);
 scene.add(nightSight);
 function placeNightSight() {
@@ -1966,6 +1997,7 @@ function onObserverChange(obs) {
     setMoonArcs(obs);
 
     var phase = calcMoonIllumination(obs.date);
+    setMoonLight(moonPos.azimuth, moonPos.altitude, phase.illumination, daylightAmount(sun.altitude));
     setStars(obs, sun.altitude, moonPos.altitude, phase.illumination);
     updateGroundSeason(obs);
     document.getElementById('moonPhase').textContent = phase.name + ' · ' + Math.round(phase.illumination * 100) + '% lit';
