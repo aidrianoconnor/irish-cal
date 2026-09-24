@@ -7,6 +7,7 @@ ideas for the 3D viewer (viewer.html), roughly in the order we plan to tackle th
 - [x] **fire festival arcs**: dashed ember arcs for the sun's path at the solar midpoints between the solstices and equinoxes (+/-16.3 deg: Bealtaine / Lúnasa north, Samhain / Imbolc south), plus the equinox arc (0 deg), each with sunrise / sunset markers
 - [x] **the moon's arcs**: its path across the sky for its current (or next) pass, traced from its calculated positions, and the limits of its range at the major / minor lunar standstills (about +/-28.6 deg and +/-18.3 deg), with moonrise / moonset markers for each
 - [x] **a toggle to show / hide the arcs** and horizon markers, separately for the sun and the moon (in the observer panel, remembered between visits)
+- [x] **details for each horizon marker**: hovering over (or tapping) a marker's label shows a small floating panel with the next date(s) of what it marks, the sunrise / sunset (or moonrise / moonset) time that day, and its bearing from true north, for pointing the way with a phone's compass; the standstill markers explain what they mark, with the last / next standstill
 
 ## observer location
 

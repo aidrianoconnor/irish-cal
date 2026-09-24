@@ -128,7 +128,9 @@ any calculation
 | 09:00 | `ee457c6` | "Auto" time zone, worked out from the lat / long with `@photostructure/tz-lookup` 11.7.0 (downloaded from npm, CC0, into `js/lib/tz-lookup`), with summer time from the browser's own time zone rules; the default |
 | 09:10 | `f7dbb0c` | a note under the paste field in the location dialog: on Auto, that the time zone will follow the new location and is worth checking; on a fixed offset, that it won't change |
 | 09:15 | `73c969e` | a second line under the moon's phase: "Next Full: Sep 26 \| Next New: Oct 10", whichever comes first shown first, as dates in the chosen time zone (`calcNextMoonPhase` in `moon.js`; checked against USNO's Sep 26 / Oct 10 / Oct 26 2026 phases) |
-| 09:25 | *(next commit)* | a small button at the upper right of the Observer and navigation panes to collapse them: the Observer up to its title, the navigation down to the heading (which still updates, and the arrow keys still work); remembered between visits |
+| 09:25 | `c57c9df` | a small button at the upper right of the Observer and navigation panes to collapse them: the Observer up to its title, the navigation down to the heading (which still updates, and the arrow keys still work); remembered between visits |
+| 09:30 | | pushed `807c91a` - `c57c9df` |
+| 09:55 | *(next commit)* | details for the horizon markers: hovering over (or tapping) a label shows a floating panel with the next date(s) of its event, the rise / set time that day and the bearing from true north (standstills: what they mark, last / next); `calcSunLongitudeMoment` in `sun.js` for the fire festival dates; `seasons.js` now loaded by the viewer |
 
 ### decisions
 
@@ -168,6 +170,21 @@ any calculation
   know a zone, it falls back to nautical time from the longitude
 - at the clock changes: a time that doesn't exist (e.g. 01:30 on the spring change in Ireland) reads as the
   hour after, and one that happens twice (01:30 on the autumn change) as the second, winter time one
+- **marker details float over the scene** (an HTML panel placed under the label each frame, or above it near the
+  bottom of the screen, kept on screen), so nothing else moves; the label brightens while its details show. the
+  panel ignores the pointer, so hovering stays with the label beneath it. labels are found with a Three.js
+  raycaster against the label sprites, skipping hidden ones (the raycaster doesn't check visibility)
+- **mouse**: hover shows, click pins; **touch**: tap pins (a press that moves < 8 px within 600 ms, so dragging to
+  look isn't a tap); tapping elsewhere or Escape unpins
+- **which dates**: the next occurrence on or after the observer's day; markers shared by two events (equinoxes, the
+  fire festival pairs) list both, soonest first. midsummer / midwinter follow the hemisphere
+- **bearings are from true north, to 16 compass points** (e.g. "046° NE"), with a note that a phone compass may need
+  "true north" turned on, and that they're for a level horizon (hills delay sunrise and move it south). sky markers
+  are directions, so the bearing is the same from anywhere on the plain, including the Reset point
+- the moon's rise / set times in the details use the almanac times (as in the observer panel), not the traced
+  path's ends (the moon's centre on the horizon), which differ by a minute or so
+- the standstills have no one date (the moon reaches each limit monthly for a year or so around a standstill), so
+  their details say what they mark, with the last / next standstill from `calcNextStandstill`
 
 ### validation
 
@@ -180,6 +197,7 @@ any calculation
 | Auto in the browser | Newgrange UTC in December / UTC+1 in July; moving to New York, Kathmandu (+5:45), Chatham (+12:45), mid-Atlantic (-2, "at sea") keeps the moment; manual choice kept when moving; both clock changes; phone width with "Auto (UTC+12:45)" |
 | next full / new | 26 Sep, 10 Oct, 26 Oct 2026 to the minute of USNO; order swaps after the full moon; dates follow the time zone (the 24 Dec 01:28 UTC full moon is Dec 23 in UTC-5) |
 | collapsing panes | both collapse and expand, remembered after a reload; hidden buttons can't be tabbed to; holding the right arrow still turns the view with the navigation pane collapsed (180 -> 237 deg), and doesn't with the location dialog open; phone width |
+| marker details | Newgrange, from 24 Sep 2026: Midsummer sunrise Jun 21 2027 4:56am, 046° NE (a hand calculation for the latitude gives 46.2°); Midwinter sunrise Dec 21 2026 8:41am, 131° SE; both equinoxes 089° E, spring first (the autumn one was the day before); Samhain Nov 7 / Imbolc Feb 4, 117° ESE; moonrise matches the observer panel's; minor standstill last Oct 2015, next May 2034. hover / click to pin / click elsewhere / Escape; closes when its arcs are switched off; phone width, tapped |
 
 the test script is in this session's scratchpad (`test_location.js`), not the repo
 

@@ -110,6 +110,22 @@
             }
             .panel-toggle:hover { background: #3a5570; }
 
+            /* a horizon marker's details, floating beside its label (placed by viewer.js); it ignores the pointer, so
+               hovering stays with the label underneath */
+            #markerInfo {
+                position: fixed; left: 0; top: 0; box-sizing: border-box;
+                width: max-content; max-width: min(17rem, calc(100vw - 16px));
+                padding: .45rem .65rem .5rem; border-radius: 6px;
+                border: 1px solid rgba(154, 170, 187, .45); border-left: 3px solid var(--accent, #fff);
+                background: rgba(0, 17, 34, .9); color: #fff;
+                font-size: .8rem; line-height: 1.35; pointer-events: none;
+            }
+            #markerInfo[hidden] { display: none; }
+            #markerInfo .title { font-weight: bold; font-size: .85rem; color: var(--accent, #fff); margin-bottom: .2rem; }
+            #markerInfo .row-heading { font-weight: bold; margin-top: .25rem; }
+            #markerInfo .note { margin-top: .3rem; opacity: .85; }
+            #markerInfo .footer { margin-top: .4rem; font-size: .7rem; opacity: .65; }
+
             #controls {
                 display: grid; gap: .3rem;
                 grid-template-columns: repeat(3, 3rem); grid-template-rows: repeat(3, 3rem);
@@ -217,6 +233,8 @@
             </form>
         </dialog>
 
+        <div id="markerInfo" role="tooltip" hidden></div>
+
         <div id="hud">
             <button id="hudToggle" class="panel-toggle" type="button" aria-controls="hudBody"></button>
             <div id="heading">
@@ -238,11 +256,12 @@
         </div>
 
         <script src="js/astro.js?v=20260924c"></script>
-        <script src="js/sun.js?v=20260924d"></script>
+        <script src="js/sun.js?v=20260924e"></script>
         <script src="js/moon.js?v=20260924e"></script>
+        <script src="js/seasons.js?v=20260924a"></script>
         <script src="js/location.js?v=20260924a"></script>
         <script src="js/lib/tz-lookup/tz.js?v=11.7.0"></script>
-        <script type="module" src="js/viewer.js?v=20260924zb"></script>
+        <script type="module" src="js/viewer.js?v=20260924ze"></script>
 
     </body>
 </html>

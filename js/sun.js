@@ -37,6 +37,18 @@ function calcSunPosition(date, latitude, longitude) {
     return pos;
 }
 
+// the moment near approxDate when the sun's apparent ecliptic longitude reaches target (degrees), e.g. 45 for
+// the midpoint between the March equinox and June solstice. within a few minutes (checked against
+// calcSolarEvent in seasons.js for the equinoxes and solstices)
+function calcSunLongitudeMoment(target, approxDate) {
+    var t = approxDate.getTime();
+    for(var i = 0; i < 6; i++) {
+        var behind = ((((target - calcSunEquatorial(new Date(t)).longitude) % 360) + 540) % 360) - 180;
+        t += (behind / 0.985647) * 86400000; // the sun moves about 0.9856 deg along the ecliptic a day
+    }
+    return new Date(t);
+}
+
 // sunrise and sunset on the observer's local day (or the day starting at dayStart, in ms, if given).
 // as in almanacs, the sun rises / sets when its upper edge touches the horizon: its centre is then
 // 0.833 deg below it (half its width plus the lift from refraction)

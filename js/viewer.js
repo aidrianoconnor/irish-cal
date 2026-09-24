@@ -351,6 +351,8 @@ scene.add(moon);
 // like the moon, the markers and the moon's path are kept centred on the observer, as they mark directions
 // rather than places. the sun's and moon's arcs (with their markers) can be shown or hidden separately
 
+var markerLabels = []; // every horizon marker's label, for finding the one under the pointer
+
 // a small text label for the sky, about heightDeg tall as seen from the observer at MARKER_DISTANCE
 function makeSkyLabel(text, color, heightDeg, opacity) {
     var fontSize = 44;
@@ -399,8 +401,11 @@ function makeHorizonMarker(group, text, color, labelAltitude, opacity) {
 
     var label = makeSkyLabel(text, color, 2.8, opacity);
     marker.add(label);
+    label.userData.marker = marker;
+    markerLabels.push(label);
 
-    marker.userData = { tick: tick, label: label };
+    // (describe is added below, with what the marker's details panel says)
+    marker.userData = { tick: tick, label: label, text: text, color: color, opacity: opacity, azimuth: null };
     setMarkerRow(marker, labelAltitude);
     group.add(marker);
     return marker;
@@ -415,6 +420,7 @@ function setMarkerRow(marker, labelAltitude) {
 }
 
 function setMarkerAzimuth(marker, azimuth) {
+    marker.userData.azimuth = azimuth;
     marker.visible = (azimuth !== null);
     if(marker.visible) {
         marker.rotation.y = -THREE.MathUtils.degToRad(azimuth);
@@ -622,9 +628,11 @@ function moonPathPoints(from, to, lat, lon) {
     return flat;
 }
 
+var moonPass = null; // the moon's current (or next) pass, as found by findMoonPass, for the markers' details
+
 function setMoonPath(obs) {
     clearMoonPath();
-    var pass = findMoonPass(obs.date, obs.lat, obs.lon);
+    var pass = moonPass = findMoonPass(obs.date, obs.lat, obs.lon);
 
     setMarkerAzimuth(moonMarkers.tonightRise, pass && pass.rise !== null ? calcMoonPosition(new Date(pass.rise), obs.lat, obs.lon).azimuth : null);
     setMarkerAzimuth(moonMarkers.tonightSet, pass && pass.set !== null ? calcMoonPosition(new Date(pass.set), obs.lat, obs.lon).azimuth : null);
@@ -688,6 +696,7 @@ function applyArcToggles() {
     setMarkerRow(moonMarkers.minorSouthSet, MOON_MARKER_ROWS.minor + raise);
     setMarkerRow(moonMarkers.tonightRise, MOON_MARKER_ROWS.tonight + raise);
     setMarkerRow(moonMarkers.tonightSet, MOON_MARKER_ROWS.tonight + raise);
+    placeMarkerInfo(); // (closes a marker's details if its arcs were just switched off, or moves them with its label)
 
     try {
         localStorage.setItem(ARC_TOGGLES_KEY, JSON.stringify({ sun: showSun, moon: showMoon }));
@@ -1210,6 +1219,7 @@ function onObserverChange(obs) {
     var phase = calcMoonIllumination(obs.date);
     document.getElementById('moonPhase').textContent = phase.name + ' · ' + Math.round(phase.illumination * 100) + '% lit';
     document.getElementById('moonNextPhases').textContent = formatNextPhases(obs.date);
+    refreshMarkerInfo(); // (a marker's details depend on the place and time too)
 }
 
 // e.g. "Next Full: Sep 26 | Next New: Oct 10", whichever comes first shown first (dates in the chosen time zone)
@@ -1343,6 +1353,319 @@ locationDialog.addEventListener('click', function(e) {
     }
 });
 
+// horizon marker details: hovering over a marker's label (or tapping it) shows a small panel beside it with the
+// dates and times of what it marks and its bearing, e.g. to point the way with a phone's compass. the panel
+// floats over the scene, so nothing else moves
+
+var markerInfo = document.getElementById('markerInfo');
+var hoveredMarker = null; // under the mouse
+var pinnedMarker = null; // tapped / clicked, shown until something else is tapped
+var shownMarker = null;
+
+var COMPASS_POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+
+// e.g. "049° NE", from true north (16 compass points, finer than the heading's 8, for pointing the way)
+function formatBearing(azimuth) {
+    var degrees = Math.round(azimuth) % 360;
+    return ('00' + degrees).slice(-3) + '° ' + COMPASS_POINTS[Math.round(azimuth / 22.5) % 16];
+}
+
+// e.g. "Jun 21, 2027" / "Jan 2025", in the chosen time zone
+function formatDateWithYear(date) {
+    var local = new Date(date.getTime() + (timeZoneOffsetAt(date) * MINUTE));
+    return formatShortDate(date) + ', ' + local.getUTCFullYear();
+}
+function formatMonthYear(date) {
+    var local = new Date(date.getTime() + (timeZoneOffsetAt(date) * MINUTE));
+    return MONTH_NAMES[local.getUTCMonth()] + ' ' + local.getUTCFullYear();
+}
+
+// e.g. "Europe/Dublin time" or "UTC-5"
+function timeZoneLabel() {
+    if(timeZoneChoice === TIME_ZONE_AUTO && autoTimeZone && autoTimeZone.indexOf('Etc/') != 0) {
+        return autoTimeZone.replace(/_/g, ' ') + ' time';
+    }
+    return formatTimeZone(timeZoneOffsetAt(observer.date));
+}
+
+// the first of eventInYear(year) (a Date) that falls on or after the observer's day
+function nextYearlyEvent(eventInYear, obs) {
+    var dayStart = localDayWindow(obs.date, obs.lon)[0];
+    for(var year = obs.date.getUTCFullYear() - 1; ; year++) {
+        var event = eventInYear(year);
+        if(event.getTime() >= dayStart) {
+            return event;
+        }
+    }
+}
+
+// a row for the sunrise / sunset on the day of a yearly event: its name and date, then the time and bearing
+function sunEventRow(name, event, obs, rise) {
+    var times = calcSunRiseSet(event, obs.lat, obs.lon);
+    var time = rise ? times.rise : times.set;
+    var what = rise ? 'Sunrise' : 'Sunset';
+    return {
+        heading: name + ': ' + formatDateWithYear(time || event),
+        text: time ? what + ' ' + formatClockTime(time) + ', bearing ' + formatBearing(calcSunPosition(time, obs.lat, obs.lon).azimuth)
+            : 'The sun doesn\'t ' + (rise ? 'rise' : 'set') + ' that day here'
+    };
+}
+
+// rows for several yearly events sharing a marker (e.g. both equinoxes), soonest first
+function sunEventRows(events, obs, rise) {
+    return events.map(function(e) {
+        return { name: e.name, event: nextYearlyEvent(e.inYear, obs) };
+    }).sort(function(a, b) {
+        return a.event - b.event;
+    }).map(function(e) {
+        return sunEventRow(e.name, e.event, obs, rise);
+    });
+}
+
+// calcSolarEvent (seasons.js): 0 = March equinox, 1 = June solstice, 2 = September equinox, 3 = December solstice
+function solarEvent(index) {
+    return function(year) { return calcSolarEvent(year, index); };
+}
+
+// the fire festivals, as the sun's midpoints between the solstices and equinoxes (see setSunArcs):
+// its ecliptic longitude, and the month it falls in (0 = January)
+function festivalEvent(longitude, month) {
+    return function(year) { return calcSunLongitudeMoment(longitude, new Date(Date.UTC(year, month, 5))); };
+}
+
+function describeSolstice(summer, rise) {
+    return function(obs) {
+        // midsummer is the June solstice in the northern hemisphere, the December one in the southern
+        var june = (summer == (obs.lat >= 0));
+        return { rows: [sunEventRow(summer ? 'Summer solstice' : 'Winter solstice', nextYearlyEvent(solarEvent(june ? 1 : 3), obs), obs, rise)] };
+    };
+}
+
+function describeEquinoxes(rise) {
+    return function(obs) {
+        var north = obs.lat >= 0;
+        return { rows: sunEventRows([
+            { name: north ? 'Spring equinox' : 'Autumn equinox', inYear: solarEvent(0) },
+            { name: north ? 'Autumn equinox' : 'Spring equinox', inYear: solarEvent(2) }
+        ], obs, rise) };
+    };
+}
+
+function describeFestivals(brightHalf, rise) {
+    return function(obs) {
+        return {
+            rows: sunEventRows(brightHalf
+                ? [{ name: 'Bealtaine', inYear: festivalEvent(45, 4) }, { name: 'Lúnasa', inYear: festivalEvent(135, 7) }]
+                : [{ name: 'Samhain', inYear: festivalEvent(225, 10) }, { name: 'Imbolc', inYear: festivalEvent(315, 1) }], obs, rise),
+            notes: ['Taken as the midpoints between the solstices and equinoxes.']
+        };
+    };
+}
+
+function describeToday(rise) {
+    return function(obs) {
+        return { rows: [sunEventRow('Today', obs.date, obs, rise)] };
+    };
+}
+
+function describeMoonPass(rise) {
+    return function(obs) {
+        var t = moonPass && (rise ? moonPass.rise : moonPass.set);
+        if(t === null || t === undefined) {
+            return { rows: [] };
+        }
+        // the path's ends are where the moon's centre crosses the horizon; the almanac time (its upper edge, as
+        // in the observer panel) is a minute or so different, so that's shown if it's for the same event
+        var almanac = calcMoonRiseSet(new Date(t), obs.lat, obs.lon);
+        var almanacTime = rise ? almanac.rise : almanac.set;
+        var time = (almanacTime && Math.abs(almanacTime - t) < 60 * MINUTE) ? almanacTime : new Date(t);
+        return { rows: [{
+            heading: formatDateWithYear(time),
+            text: (rise ? 'Moonrise ' : 'Moonset ') + formatClockTime(time) + ', bearing ' + formatBearing(calcMoonPosition(time, obs.lat, obs.lon).azimuth)
+        }] };
+    };
+}
+
+// the standstills have no single date: the moon reaches these limits once a month, for a year or so either
+// side of each standstill (calcNextStandstill is from moon.js)
+var STANDSTILL_CYCLE_MS = 18.6 * 365.25 * 86400000;
+
+function describeStandstill(major, north, rise) {
+    return function(obs, marker) {
+        var next = calcNextStandstill(obs.date, major ? 'major' : 'minor');
+        var last = new Date(next.getTime() - STANDSTILL_CYCLE_MS);
+        var way = (rise ? 'rises' : 'sets');
+        var side = (north ? 'north' : 'south');
+        return {
+            rows: [{ heading: 'Bearing ' + formatBearing(marker.userData.azimuth) }],
+            noTimes: true,
+            notes: [major
+                ? 'The farthest ' + side + ' the moon ever ' + way + '. It gets this far once a month for a year or so either side of a major standstill, every 18.6 years.'
+                : 'The farthest ' + side + ' the moon ' + way + ' at a minor standstill, when its monthly swing is narrowest (every 18.6 years, between the major ones).',
+                'Last: ' + formatMonthYear(last) + ' · next: ' + formatMonthYear(next)]
+        };
+    };
+}
+
+var MARKER_DESCRIPTIONS = [
+    [markers.summerRise, describeSolstice(true, true)], [markers.summerSet, describeSolstice(true, false)],
+    [markers.winterRise, describeSolstice(false, true)], [markers.winterSet, describeSolstice(false, false)],
+    [markers.equinoxRise, describeEquinoxes(true)], [markers.equinoxSet, describeEquinoxes(false)],
+    [markers.brightHalfRise, describeFestivals(true, true)], [markers.brightHalfSet, describeFestivals(true, false)],
+    [markers.darkHalfRise, describeFestivals(false, true)], [markers.darkHalfSet, describeFestivals(false, false)],
+    [markers.todayRise, describeToday(true)], [markers.todaySet, describeToday(false)],
+    [moonMarkers.majorNorthRise, describeStandstill(true, true, true)], [moonMarkers.majorNorthSet, describeStandstill(true, true, false)],
+    [moonMarkers.majorSouthRise, describeStandstill(true, false, true)], [moonMarkers.majorSouthSet, describeStandstill(true, false, false)],
+    [moonMarkers.minorNorthRise, describeStandstill(false, true, true)], [moonMarkers.minorNorthSet, describeStandstill(false, true, false)],
+    [moonMarkers.minorSouthRise, describeStandstill(false, false, true)], [moonMarkers.minorSouthSet, describeStandstill(false, false, false)],
+    [moonMarkers.tonightRise, describeMoonPass(true)], [moonMarkers.tonightSet, describeMoonPass(false)]
+];
+MARKER_DESCRIPTIONS.forEach(function(entry) {
+    entry[0].userData.describe = entry[1];
+});
+
+// fills the details panel for the marker being shown
+function refreshMarkerInfo() {
+    if(!shownMarker) {
+        return;
+    }
+    var info = shownMarker.userData.describe(observer, shownMarker);
+    markerInfo.textContent = '';
+    markerInfo.style.setProperty('--accent', '#' + new THREE.Color(shownMarker.userData.color).getHexString());
+
+    var add = function(className, text) {
+        var el = document.createElement('div');
+        el.className = className;
+        el.textContent = text;
+        markerInfo.appendChild(el);
+    };
+    add('title', shownMarker.userData.text);
+    info.rows.forEach(function(row) {
+        add('row-heading', row.heading);
+        if(row.text) {
+            add('row', row.text);
+        }
+    });
+    (info.notes || []).forEach(function(note) {
+        add('note', note);
+    });
+    add('footer', (info.noTimes ? '' : 'Times in ' + timeZoneLabel() + '. ')
+        + 'Bearings are from true north (a phone compass may need "true north" turned on), for a level horizon.');
+}
+
+function showMarkerInfo(marker) {
+    if(marker === shownMarker) {
+        return;
+    }
+    if(shownMarker) {
+        shownMarker.userData.label.material.opacity = shownMarker.userData.opacity;
+    }
+    shownMarker = marker;
+    markerInfo.hidden = !marker;
+    if(marker) {
+        marker.userData.label.material.opacity = 1; // brightened, to show which label the details are for
+        refreshMarkerInfo();
+        placeMarkerInfo();
+    }
+}
+
+function updateShownMarker() {
+    showMarkerInfo(pinnedMarker || hoveredMarker);
+}
+
+// whether an object and everything it's in are visible (e.g. not a hidden marker, or the moon's with its arcs off)
+function isShown(object) {
+    for(; object; object = object.parent) {
+        if(!object.visible) {
+            return false;
+        }
+    }
+    return true;
+}
+
+var raycaster = new THREE.Raycaster();
+var pointerPosition = new THREE.Vector2();
+
+// the marker whose label is at the given point on the screen, if any
+function markerAt(x, y) {
+    pointerPosition.set(((x / window.innerWidth) * 2) - 1, 1 - ((y / window.innerHeight) * 2));
+    raycaster.setFromCamera(pointerPosition, camera);
+    var hits = raycaster.intersectObjects(markerLabels.filter(isShown), false);
+    return hits.length ? hits[0].object.userData.marker : null;
+}
+
+// keeps the panel just below its label (or above it, near the bottom of the screen), on screen; hidden if
+// the label has gone (e.g. its arcs were switched off, or it's turned out of view)
+var labelPosition = new THREE.Vector3();
+function placeMarkerInfo() {
+    if(!shownMarker) {
+        return;
+    }
+    var label = shownMarker.userData.label;
+    if(!isShown(label)) {
+        // its marker is gone (its arcs switched off, or it no longer rises / sets here): unpinned too
+        pinnedMarker = hoveredMarker = null;
+        showMarkerInfo(null);
+        return;
+    }
+    label.getWorldPosition(labelPosition).project(camera);
+    var onScreen = labelPosition.z < 1 && Math.abs(labelPosition.x) < 1.1 && Math.abs(labelPosition.y) < 1.1;
+    markerInfo.style.visibility = onScreen ? '' : 'hidden';
+    if(!onScreen) {
+        return;
+    }
+    var x = (labelPosition.x + 1) / 2 * window.innerWidth;
+    var y = (1 - labelPosition.y) / 2 * window.innerHeight;
+    var labelHalfHeight = (2.8 / camera.fov) * window.innerHeight / 2;
+    var width = markerInfo.offsetWidth, height = markerInfo.offsetHeight, margin = 8;
+
+    var top = y + labelHalfHeight + 6;
+    if(top + height > window.innerHeight - margin) {
+        top = y - labelHalfHeight - 6 - height;
+    }
+    markerInfo.style.left = Math.round(THREE.MathUtils.clamp(x - (width / 2), margin, window.innerWidth - width - margin)) + 'px';
+    markerInfo.style.top = Math.round(Math.max(margin, top)) + 'px';
+}
+
+// hovering with the mouse (not while free-looking)
+renderer.domElement.addEventListener('pointermove', function(e) {
+    if(e.pointerType != 'mouse' || look) {
+        return;
+    }
+    hoveredMarker = markerAt(e.clientX, e.clientY);
+    renderer.domElement.style.cursor = hoveredMarker ? 'pointer' : '';
+    updateShownMarker();
+});
+renderer.domElement.addEventListener('pointerleave', function() {
+    hoveredMarker = null;
+    updateShownMarker();
+});
+
+// a tap or click (a press that barely moves) on a label pins its details; anywhere else unpins them
+var press = null;
+renderer.domElement.addEventListener('pointerdown', function(e) {
+    press = (e.isPrimary && e.button == 0) ? { id: e.pointerId, x: e.clientX, y: e.clientY, time: e.timeStamp } : null;
+});
+renderer.domElement.addEventListener('pointerup', function(e) {
+    if(!press || e.pointerId != press.id) {
+        return;
+    }
+    var moved = Math.hypot(e.clientX - press.x, e.clientY - press.y);
+    var isTap = moved < 8 && (e.timeStamp - press.time) < 600;
+    press = null;
+    if(isTap) {
+        var marker = markerAt(e.clientX, e.clientY);
+        pinnedMarker = (marker && marker !== pinnedMarker) ? marker : null;
+        updateShownMarker();
+    }
+});
+window.addEventListener('keydown', function(e) {
+    if(e.key == 'Escape' && pinnedMarker && !locationDialog.open) {
+        pinnedMarker = null;
+        updateShownMarker();
+    }
+});
+
 // render loop
 
 var lastTime = null;
@@ -1369,6 +1692,8 @@ function animate(time) {
     moonPath.position.copy(camera.position);
 
     renderer.render(scene, camera);
+    // (after rendering, so the labels' positions are up to date)
+    placeMarkerInfo();
 }
 
 window.addEventListener('resize', function() {
