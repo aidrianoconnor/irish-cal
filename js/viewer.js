@@ -117,7 +117,40 @@ var SKY_FRAGMENT_SHADER = [
     'uniform vec3 moonStandstillColor;',
     'uniform float showSunArcs;', // 1 to show, 0 to hide
     'uniform float showMoonArcs;',
+    'uniform mat3 skyToGalactic;', // turns a direction in the scene into galactic coordinates (set with the stars)
+    'uniform float milkyWay;', // 0 (daylight, twilight or a bright moon) to 1 (a dark, moonless night)
     'varying vec3 vDirection;',
+    '',
+    // smooth random values in 3D (value noise), for the Milky Way's patchiness
+    'float hash(vec3 p) {',
+    '    return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453);',
+    '}',
+    'float valueNoise(vec3 p) {',
+    '    vec3 i = floor(p);',
+    '    vec3 f = fract(p);',
+    '    f = f * f * (3.0 - (2.0 * f));',
+    '    return mix(mix(mix(hash(i), hash(i + vec3(1.0, 0.0, 0.0)), f.x),',
+    '                   mix(hash(i + vec3(0.0, 1.0, 0.0)), hash(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),',
+    '               mix(mix(hash(i + vec3(0.0, 0.0, 1.0)), hash(i + vec3(1.0, 0.0, 1.0)), f.x),',
+    '                   mix(hash(i + vec3(0.0, 1.0, 1.0)), hash(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);',
+    '}',
+    '',
+    // the Milky Way: an impression of it, not a picture, but in its real place. a soft band along the galactic
+    // plane (galactic latitude 0), widest and brightest towards the centre of the galaxy (in Sagittarius, galactic
+    // longitude 0), with the bulge around the centre, the dark dust lane of the Great Rift down the middle from
+    // Cygnus towards the centre, and patchy star clouds
+    'float milkyWayGlow(vec3 dir) {',
+    '    vec3 g = skyToGalactic * dir;',
+    '    float b = degrees(asin(clamp(g.z, -1.0, 1.0)));',
+    '    float l = degrees(atan(g.y, g.x));', // -180 to 180, 0 towards the centre
+    '    float centre = exp(-pow(l / 70.0, 2.0));',
+    '    float band = exp(-0.5 * pow(b / mix(7.0, 13.0, centre), 2.0)) * (0.4 + (0.6 * centre));',
+    '    band += 0.5 * exp(-pow(l / 18.0, 2.0) - pow(b / 9.0, 2.0));',
+    '    float rift = exp(-0.5 * pow((b - 1.0) / 2.2, 2.0)) * smoothstep(-20.0, 5.0, l) * (1.0 - smoothstep(55.0, 85.0, l));',
+    '    band *= 1.0 - (0.55 * rift);',
+    '    float clouds = (0.55 * valueNoise(g * 9.0)) + (0.3 * valueNoise(g * 21.0)) + (0.15 * valueNoise(g * 47.0));',
+    '    return band * mix(0.45, 1.25, clouds);',
+    '}',
     '',
     // how much the atmosphere lifts things near the horizon (degrees), Bennett's formula as in astro.js
     'float refraction(float altitude) {',
@@ -154,6 +187,11 @@ var SKY_FRAGMENT_SHADER = [
     '    vec2 flatSun = normalize(sunDirection.xz + vec2(1e-5));',
     '    float sunSide = pow((dot(flatDir, flatSun) + 1.0) / 2.0, 3.0);',
     '    color += twilightGlow * twilight * sunSide * pow(1.0 - height, 4.0);',
+    '',
+    // the Milky Way, only on a dark night, fading out towards the horizon (through more air)
+    '    if(milkyWay > 0.0) {',
+    '        color += vec3(0.09, 0.1, 0.13) * milkyWayGlow(dir) * milkyWay * smoothstep(0.0, 0.35, dir.y);',
+    '    }',
     '',
     // sun arcs: the sun's daily path at the solstices and today. each is a circle of constant
     // declination, so find this point's declination and hour angle for the observer's latitude
@@ -236,7 +274,9 @@ function makeSkyDome() {
             moonParallax: { value: MOON_MEAN_PARALLAX },
             moonStandstillColor: { value: srgbColor(MOON_STANDSTILL_COLOR) },
             showSunArcs: { value: 1 },
-            showMoonArcs: { value: 1 }
+            showMoonArcs: { value: 1 },
+            skyToGalactic: { value: new THREE.Matrix3() },
+            milkyWay: { value: 0 }
         },
         vertexShader: SKY_VERTEX_SHADER,
         fragmentShader: SKY_FRAGMENT_SHADER,
@@ -471,8 +511,22 @@ function setStars(obs, sunAltitude, moonAltitude, moonIllumination) {
     );
     stars.matrix.copy(local).multiply(siderealTime).multiply(precession);
     stars.matrixWorldNeedsUpdate = true;
-    stars.material.uniforms.limitingMagnitude.value = limitingMagnitude(sunAltitude, moonAltitude, moonIllumination);
+    var limit = limitingMagnitude(sunAltitude, moonAltitude, moonIllumination);
+    stars.material.uniforms.limitingMagnitude.value = limit;
+
+    // the Milky Way (drawn by the sky shader) uses the same rotation, back from the scene to J2000, then
+    // into galactic coordinates. it needs a properly dark sky: faint by a full moon, gone in twilight
+    var uniforms = skyDome.material.uniforms;
+    uniforms.skyToGalactic.value.setFromMatrix4(stars.matrix).transpose().premultiply(EQUATORIAL_TO_GALACTIC);
+    uniforms.milkyWay.value = THREE.MathUtils.clamp((limit - 4) / 1.5, 0, 1);
 }
+
+// J2000 equatorial to galactic coordinates (x towards the galactic centre, z towards the north galactic pole)
+var EQUATORIAL_TO_GALACTIC = new THREE.Matrix3().set(
+    -0.0548755604, -0.8734370902, -0.4838350155,
+    0.4941094279, -0.4448296300, 0.7469822445,
+    -0.8676661490, -0.1980763734, 0.4559837762
+);
 
 // sun and moon arcs, and horizon markers
 // the sun's arcs (midsummer, midwinter, the fire festivals, the equinoxes and today) and the limits of

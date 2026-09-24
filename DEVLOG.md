@@ -132,7 +132,8 @@ any calculation
 | 09:30 | | pushed `807c91a` - `c57c9df` |
 | 09:55 | `5217dc8` | details for the horizon markers: hovering over (or tapping) a label shows a floating panel with the next date(s) of its event, the rise / set time that day and the bearing from true north (standstills: what they mark, last / next); `calcSunLongitudeMoment` in `sun.js` for the fire festival dates; `seasons.js` now loaded by the viewer |
 | 10:00 | | pushed `5217dc8`; talked through how to do the stars (real or fake, and the Milky Way) |
-| 10:35 | *(next commit)* | real stars: the Yale Bright Star Catalogue (5th revised ed., downloaded from CDS, catalogue V/50) trimmed to the 2,887 stars down to magnitude 5.5 (`js/stars.js`, 55 KB); `precessionMatrix` in `astro.js`; drawn as points turned by one rotation, fading with twilight and moonlight, dimmer near the horizon |
+| 10:35 | `112f24b` | real stars: the Yale Bright Star Catalogue (5th revised ed., downloaded from CDS, catalogue V/50) trimmed to the 2,887 stars down to magnitude 5.5 (`js/stars.js`, 55 KB); `precessionMatrix` in `astro.js`; drawn as points turned by one rotation, fading with twilight and moonlight, dimmer near the horizon |
+| 10:50 | *(next commit)* | the Milky Way, drawn by the sky shader along the galactic plane (the stars' rotation, then J2000 to galactic coordinates): widest and brightest towards Sagittarius, with the bulge, the Great Rift and patchy star clouds; only on a dark night |
 
 ### decisions
 
@@ -203,6 +204,13 @@ any calculation
 - **visibility**: the faintest magnitude that shows follows the sun's altitude (none above -3 deg, the brightest from
   about -6, all by -15), less up to a magnitude for a bright moon that's up; stars dim near the horizon (about a
   quarter magnitude per air mass) and aren't drawn below it
+- **the Milky Way is drawn, not a photograph**: the sky shader turns each direction back to J2000 (the stars'
+  rotation, transposed) and into galactic coordinates, then draws a soft band along galactic latitude 0: wider
+  and brighter towards the centre (galactic longitude 0, in Sagittarius), a bulge around the centre, the Great
+  Rift (a darker lane from Cygnus towards the centre) and 3D value noise for star clouds (3D, so no seam). no
+  image, no download, and right for any date and place
+- it shows only on a dark night: its strength follows the stars' limiting magnitude (none until about magnitude
+  4, full by 5.5), so it's faint by a full moon and gone in twilight, and it fades out towards the horizon
 
 ### validation
 
@@ -217,6 +225,7 @@ any calculation
 | collapsing panes | both collapse and expand, remembered after a reload; hidden buttons can't be tabbed to; holding the right arrow still turns the view with the navigation pane collapsed (180 -> 237 deg), and doesn't with the location dialog open; phone width |
 | marker details | Newgrange, from 24 Sep 2026: Midsummer sunrise Jun 21 2027 4:56am, 046° NE (a hand calculation for the latitude gives 46.2°); Midwinter sunrise Dec 21 2026 8:41am, 131° SE; both equinoxes 089° E, spring first (the autumn one was the day before); Samhain Nov 7 / Imbolc Feb 4, 117° ESE; moonrise matches the observer panel's; minor standstill last Oct 2015, next May 2034. hover / click to pin / click elsewhere / Escape; closes when its arcs are switched off; phone width, tapped |
 | stars | catalogue spot checks (Polaris, Sirius, Vega, Betelgeuse, Rigel, Arcturus: positions and colours); `precessionMatrix` reproduces Meeus example 21.b to 0.00"; the sky rotation matches `equatorialToHorizontal` to 1e-13 deg (every 97th star, 4 places, 4 dates); Polaris at the latitude; in the browser, the Plough's stars within a few pixels of their predicted screen positions (Newgrange, 10 Oct 2026 23:00); twilight fade at sun -8 / -13 / -17 deg; fewer stars at full moon |
+| Milky Way | the equatorial -> galactic matrix gives the galactic centre l = 0, b = 0 and the pole b = 90 exactly; Deneb and Sirius match the catalogue's own galactic coordinates; in the browser (Newgrange, 10 Oct 2026 23:00) the band rises at about 245 deg in the WSW (predicted 245-248, Aquila) with the rift splitting it, and comes down fainter at about 64 deg ENE (predicted 58-62, Perseus / Auriga) |
 
 the test scripts are in this session's scratchpad (`test_location.js`, `test_stars.js`, `build_stars.js`), not the repo
 

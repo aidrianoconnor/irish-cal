@@ -17,7 +17,7 @@ ideas for the 3D viewer (viewer.html), roughly in the order we plan to tackle th
 ## the scene
 
 - [x] **stars in the night sky**: after all, the real stars (it turned out little more work than fake ones, as the whole sky turns as one): the Bright Star Catalogue's 2,887 stars down to magnitude 5.5, placed for the observer's date, time and place, fading in with twilight (brightest first), dimmer near the horizon and washed out by a bright moon. still no names or constellation lines: this isn't Star Walk
-- [ ] **the Milky Way**: a soft band along the galactic plane, drawn by the sky shader in its proper place and rotation (brightest towards Sagittarius, with a darker dust lane), an impression rather than a photograph
+- [x] **the Milky Way**: a soft band along the galactic plane, drawn by the sky shader in its proper place and rotation (brightest towards Sagittarius, with a darker dust lane), an impression rather than a photograph
 - [ ] **the planets** (maybe later): Venus and Jupiter are often the brightest things in the night sky after the moon, so a real star field feels incomplete without them; rough positions from a small table of orbital elements
 - [ ] **more interesting terrain**, with the ground's colour following the season, e.g. grey in winter, brown in spring, green in summer, orange in autumn (following the observer's hemisphere)
 - [ ] **standing stone rings**: turn the 2D rings of the original calendar page (index.html: the solar year, the fire festivals and the lunar month) into rings of standing stones around the observer, with a small floating marker above the stone for where "now" falls in each ring
