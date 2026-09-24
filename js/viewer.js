@@ -1054,38 +1054,96 @@ function makeGroundGeometry() {
 }
 
 // the ground's colour varies in patches: between a lush and a drier grass, with patches of bare earth and of
-// stone showing through. how much of each there is at each vertex is worked out once (groundMix); the colours
-// themselves (a palette) are applied separately, so they can follow the season
+// stone showing through. the patterns at each vertex are worked out once (groundMix, as noise values); the colours
+// and how far the bare patches spread come from the season (groundSeason), applied by colourGround
 function groundMix(x, z) {
     var r = Math.sqrt((x * x) + (z * z));
     var near = 1 - THREE.MathUtils.smoothstep(r, 25, 50); // (the finest patches fade out where the rings are far apart)
-    var dry = groundNoise(x / 9, z / 9, 4);
-    var earth = THREE.MathUtils.smoothstep((0.5 * groundNoise(x / 3.5, z / 3.5, 5)) + (0.5 * near * groundNoise(x / 1.4, z / 1.4, 6)), 0.68, 0.76);
-    var stone = THREE.MathUtils.smoothstep((0.5 * groundNoise(x / 2.5, z / 2.5, 7)) + (0.5 * near * groundNoise(x / 0.9, z / 0.9, 8)), 0.74, 0.79);
     // clumps of lighter and darker grass, and the dips a little darker (damper), the rises a little lighter
     var clumps = 0.9 + (0.2 * THREE.MathUtils.lerp(0.5, groundNoise(x / 1.6, z / 1.6, 9), near));
-    var shade = clumps * (1 + (0.6 * groundHeight(x, z)));
-    return { dry: dry, earth: earth * 0.6, stone: stone * 0.55, shade: shade };
+    return {
+        dry: groundNoise(x / 9, z / 9, 4),
+        earth: (0.5 * groundNoise(x / 3.5, z / 3.5, 5)) + (0.5 * near * groundNoise(x / 1.4, z / 1.4, 6)),
+        stone: (0.5 * groundNoise(x / 2.5, z / 2.5, 7)) + (0.5 * near * groundNoise(x / 0.9, z / 0.9, 8)),
+        shade: clumps * (1 + (0.6 * groundHeight(x, z)))
+    };
 }
 
-var GROUND_PALETTE = {
-    lush: new THREE.Color('#3f8a34'),
-    dry: new THREE.Color('#6b8f3c'),
-    earth: new THREE.Color('#6e5a3e'),
-    stone: new THREE.Color('#8a857a')
-};
+// the ground through the year, at the solstices, equinoxes and fire festivals, by the sun's ecliptic longitude
+// (0 at the March equinox, as in setSunArcs; flipped for the southern hemisphere). the grass lags the sun: it's
+// freshest around Bealtaine, driest after Lúnasa, and dullest (with the most bare, wet ground) through the winter.
+// Irish grass stays green all year, so the changes are in how bright, dry or tawny it is, and how much bare
+// ground shows. each: the lush and dry grass colours, how far the mix leans to the dry one, how much further the
+// bare earth and stone patches spread, and the earth's colour (darker when wet)
+var GROUND_SEASONS = [
+    { longitude: 0, name: 'spring equinox', lush: '#4c8134', dry: '#6d8740', dryBias: 0, earthSpread: 0.03, stoneSpread: 0.015, earth: '#62503a' },
+    { longitude: 45, name: 'Bealtaine', lush: '#44932f', dry: '#6f9d3d', dryBias: -0.15, earthSpread: -0.01, stoneSpread: 0, earth: '#6a563c' },
+    { longitude: 90, name: 'midsummer', lush: '#3f8a34', dry: '#6b8f3c', dryBias: 0, earthSpread: 0, stoneSpread: 0, earth: '#6e5a3e' },
+    { longitude: 135, name: 'Lúnasa', lush: '#4b8434', dry: '#918e40', dryBias: 0.15, earthSpread: 0.01, stoneSpread: 0, earth: '#72603f' },
+    { longitude: 180, name: 'autumn equinox', lush: '#537c37', dry: '#95813e', dryBias: 0.2, earthSpread: 0.02, stoneSpread: 0.005, earth: '#6a563b' },
+    { longitude: 225, name: 'Samhain', lush: '#556f39', dry: '#8e6b3b', dryBias: 0.2, earthSpread: 0.05, stoneSpread: 0.02, earth: '#5f4b35' },
+    { longitude: 270, name: 'midwinter', lush: '#4b683b', dry: '#77734f', dryBias: 0.15, earthSpread: 0.07, stoneSpread: 0.04, earth: '#584632' },
+    { longitude: 315, name: 'Imbolc', lush: '#4b7039', dry: '#79784c', dryBias: 0.1, earthSpread: 0.06, stoneSpread: 0.03, earth: '#5a4833' }
+].map(function(k) {
+    return {
+        longitude: k.longitude, name: k.name, dryBias: k.dryBias, earthSpread: k.earthSpread, stoneSpread: k.stoneSpread,
+        lush: new THREE.Color(k.lush), dry: new THREE.Color(k.dry), earth: new THREE.Color(k.earth)
+    };
+});
+var GROUND_STONE_COLOR = new THREE.Color('#8a857a');
+
+// the ground's look for the observer's date and place: blended between the two nearest of GROUND_SEASONS.
+// near the equator, where these seasons don't apply, it settles on a mild all-year green (the spring equinox's)
+function groundSeason(obs) {
+    var longitude = calcSunEquatorial(obs.date).longitude + (obs.lat < 0 ? 180 : 0);
+    longitude = ((longitude % 360) + 360) % 360;
+    var i = Math.floor(longitude / 45) % GROUND_SEASONS.length;
+    var a = GROUND_SEASONS[i], b = GROUND_SEASONS[(i + 1) % GROUND_SEASONS.length];
+    var t = THREE.MathUtils.smoothstep((longitude - a.longitude) / 45, 0, 1);
+    var mix = function(key) { return THREE.MathUtils.lerp(a[key], b[key], t); };
+    var season = {
+        lush: a.lush.clone().lerp(b.lush, t), dry: a.dry.clone().lerp(b.dry, t), earth: a.earth.clone().lerp(b.earth, t),
+        dryBias: mix('dryBias'), earthSpread: mix('earthSpread'), stoneSpread: mix('stoneSpread')
+    };
+    var strength = THREE.MathUtils.smoothstep(Math.abs(obs.lat), 10, 30);
+    if(strength < 1) {
+        var mild = GROUND_SEASONS[0];
+        season.lush.lerpColors(mild.lush, season.lush, strength);
+        season.dry.lerpColors(mild.dry, season.dry, strength);
+        season.earth.lerpColors(mild.earth, season.earth, strength);
+        season.dryBias *= strength;
+        season.earthSpread *= strength;
+        season.stoneSpread *= strength;
+    }
+    return season;
+}
 
 var groundMixes = []; // one for each vertex of the ground
 
-function colourGround(palette) {
+// colours the ground for a season (from groundSeason)
+function colourGround(season) {
     var colors = ground.geometry.attributes.color;
     var c = new THREE.Color();
+    var smoothstep = THREE.MathUtils.smoothstep;
     for(var i = 0; i < groundMixes.length; i++) {
         var m = groundMixes[i];
-        c.lerpColors(palette.lush, palette.dry, m.dry).lerp(palette.earth, m.earth).lerp(palette.stone, m.stone).multiplyScalar(m.shade);
+        var dry = THREE.MathUtils.clamp(m.dry + season.dryBias, 0, 1);
+        var earth = 0.6 * smoothstep(m.earth, 0.68 - season.earthSpread, 0.76 - season.earthSpread);
+        var stone = 0.55 * smoothstep(m.stone, 0.74 - season.stoneSpread, 0.79 - season.stoneSpread);
+        c.lerpColors(season.lush, season.dry, dry).lerp(season.earth, earth).lerp(GROUND_STONE_COLOR, stone).multiplyScalar(m.shade);
         colors.setXYZ(i, c.r, c.g, c.b);
     }
     colors.needsUpdate = true;
+}
+
+// recolours the ground when the season has moved on (by a day or so of the sun's travel), or the hemisphere changed
+var groundSeasonKey = null;
+function updateGroundSeason(obs) {
+    var key = Math.round(calcSunEquatorial(obs.date).longitude) + ':' + Math.round(obs.lat);
+    if(key !== groundSeasonKey) {
+        groundSeasonKey = key;
+        colourGround(groundSeason(obs));
+    }
 }
 
 // fine grain for the ground up close: a small tile of random light and dark speckles, in two sizes (about 3 and
@@ -1125,7 +1183,6 @@ var ground = new THREE.Mesh(makeGroundGeometry(), new THREE.MeshStandardMaterial
         groundMixes.push(groundMix(positions.getX(i), positions.getZ(i)));
     }
 })();
-colourGround(GROUND_PALETTE);
 scene.add(ground);
 
 // the haze: the ground fades into the colour of the sky at the horizon with distance, as far-off land does through
@@ -1573,6 +1630,7 @@ function onObserverChange(obs) {
 
     var phase = calcMoonIllumination(obs.date);
     setStars(obs, sun.altitude, moonPos.altitude, phase.illumination);
+    updateGroundSeason(obs);
     document.getElementById('moonPhase').textContent = phase.name + ' · ' + Math.round(phase.illumination * 100) + '% lit';
     document.getElementById('moonNextPhases').textContent = formatNextPhases(obs.date);
     refreshMarkerInfo(); // (a marker's details depend on the place and time too)
