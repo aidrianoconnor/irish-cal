@@ -133,7 +133,8 @@ any calculation
 | 09:55 | `5217dc8` | details for the horizon markers: hovering over (or tapping) a label shows a floating panel with the next date(s) of its event, the rise / set time that day and the bearing from true north (standstills: what they mark, last / next); `calcSunLongitudeMoment` in `sun.js` for the fire festival dates; `seasons.js` now loaded by the viewer |
 | 10:00 | | pushed `5217dc8`; talked through how to do the stars (real or fake, and the Milky Way) |
 | 10:35 | `112f24b` | real stars: the Yale Bright Star Catalogue (5th revised ed., downloaded from CDS, catalogue V/50) trimmed to the 2,887 stars down to magnitude 5.5 (`js/stars.js`, 55 KB); `precessionMatrix` in `astro.js`; drawn as points turned by one rotation, fading with twilight and moonlight, dimmer near the horizon |
-| 10:50 | *(next commit)* | the Milky Way, drawn by the sky shader along the galactic plane (the stars' rotation, then J2000 to galactic coordinates): widest and brightest towards Sagittarius, with the bulge, the Great Rift and patchy star clouds; only on a dark night |
+| 10:50 | `c91f066` | the Milky Way, drawn by the sky shader along the galactic plane (the stars' rotation, then J2000 to galactic coordinates): widest and brightest towards Sagittarius, with the bulge, the Great Rift and patchy star clouds; only on a dark night |
+| 11:00 | *(next commit)* | the Milky Way made much brighter (it was almost invisible): about 2.4x, a brighter outer band, and visible lower towards the horizon |
 
 ### decisions
 

@@ -144,7 +144,7 @@ var SKY_FRAGMENT_SHADER = [
     '    float b = degrees(asin(clamp(g.z, -1.0, 1.0)));',
     '    float l = degrees(atan(g.y, g.x));', // -180 to 180, 0 towards the centre
     '    float centre = exp(-pow(l / 70.0, 2.0));',
-    '    float band = exp(-0.5 * pow(b / mix(7.0, 13.0, centre), 2.0)) * (0.4 + (0.6 * centre));',
+    '    float band = exp(-0.5 * pow(b / mix(7.0, 13.0, centre), 2.0)) * (0.55 + (0.45 * centre));',
     '    band += 0.5 * exp(-pow(l / 18.0, 2.0) - pow(b / 9.0, 2.0));',
     '    float rift = exp(-0.5 * pow((b - 1.0) / 2.2, 2.0)) * smoothstep(-20.0, 5.0, l) * (1.0 - smoothstep(55.0, 85.0, l));',
     '    band *= 1.0 - (0.55 * rift);',
@@ -190,7 +190,7 @@ var SKY_FRAGMENT_SHADER = [
     '',
     // the Milky Way, only on a dark night, fading out towards the horizon (through more air)
     '    if(milkyWay > 0.0) {',
-    '        color += vec3(0.09, 0.1, 0.13) * milkyWayGlow(dir) * milkyWay * smoothstep(0.0, 0.35, dir.y);',
+    '        color += vec3(0.22, 0.24, 0.3) * milkyWayGlow(dir) * milkyWay * smoothstep(0.0, 0.25, dir.y);',
     '    }',
     '',
     // sun arcs: the sun's daily path at the solstices and today. each is a circle of constant
