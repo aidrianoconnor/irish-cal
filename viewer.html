@@ -24,6 +24,9 @@
             #observer .readout { font-size: .85rem; max-width: 9.5rem; }
             #observer input { font: inherit; font-size: .9rem; width: 9.5rem; padding: .15rem .3rem; box-sizing: border-box; }
             #observer input.invalid { outline: 2px solid #f55; }
+            #observer .toggles { display: flex; gap: 1rem; font-size: .85rem; }
+            #observer .toggles label { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
+            #observer .toggles input { width: auto; margin: 0; }
 
             #hud {
                 position: fixed; left: 50%; bottom: 1rem; transform: translateX(-50%);
@@ -59,13 +62,14 @@
             #moveBack { grid-area: down; }
         </style>
 
-        <!-- Three.js is loaded from js/lib/three (r186). to load it from the CDN instead,
+        <!-- Three.js (r186) and the add-ons used (lines) are loaded from js/lib/three. to load them from the CDN instead,
              uncomment this block and comment out the local import map below
              (import maps are JSON, which doesn't allow comments inside it, and only one can be active)
         <script type="importmap">
             {
                 "imports": {
-                    "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js"
+                    "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+                    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
                 }
             }
         </script>
@@ -73,7 +77,8 @@
         <script type="importmap">
             {
                 "imports": {
-                    "three": "./js/lib/three/three.module.js"
+                    "three": "./js/lib/three/three.module.js",
+                    "three/addons/": "./js/lib/three/addons/"
                 }
             }
         </script>
@@ -99,6 +104,11 @@
                 <span id="moonPosition" class="readout"></span>
                 <span class="label">Phase</span>
                 <span id="moonPhase" class="readout"></span>
+                <span class="label">Arcs</span>
+                <span class="toggles">
+                    <label><input id="showSunArcs" type="checkbox" checked> Sun</label>
+                    <label><input id="showMoonArcs" type="checkbox" checked> Moon</label>
+                </span>
             </div>
         </form>
 
@@ -119,8 +129,8 @@
 
         <script src="js/astro.js?v=20260924b"></script>
         <script src="js/sun.js?v=20260924c"></script>
-        <script src="js/moon.js?v=20260924b"></script>
-        <script type="module" src="js/viewer.js?v=20260924r"></script>
+        <script src="js/moon.js?v=20260924c"></script>
+        <script type="module" src="js/viewer.js?v=20260924u"></script>
 
     </body>
 </html>

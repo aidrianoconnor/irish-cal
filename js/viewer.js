@@ -8,6 +8,9 @@
 // headings / azimuths are in degrees clockwise from north
 
 import * as THREE from 'three';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 
 var EYE_HEIGHT = 1.6;
 var GROUND_RADIUS = 60;
@@ -25,6 +28,11 @@ var WINTER_ARC_COLOR = '#a9c6ff'; // cool silver-blue
 var TODAY_ARC_COLOR = '#ffffff';
 var FESTIVAL_ARC_COLOR = '#ff8a3d'; // ember orange
 var EQUINOX_ARC_COLOR = '#d6e4d2'; // soft pale green-grey
+var MOON_PATH_COLOR = '#d9d2ff'; // pale lavender-silver
+var MOON_STANDSTILL_COLOR = '#b3a2f0'; // lavender
+var MOON_PATH_DISTANCE = 450; // the moon's path is drawn just inside the sky dome, behind the moon
+var MOON_ORBIT_INCLINATION = 5.145; // degrees, the tilt of the moon's orbit to the ecliptic
+var MOON_MEAN_PARALLAX = 0.9507; // degrees, how much lower the moon sits seen from the Earth's surface (at the horizon)
 var MARKER_DISTANCE = 300; // horizon markers sit in the sky, inside the moon's distance
 var MOON_SIZE_SCALE = 6; // the real moon (about 0.5 deg across) is drawn this many times larger so it's easy to see
 
@@ -104,6 +112,11 @@ var SKY_FRAGMENT_SHADER = [
     'uniform float festivalDeclination;', // degrees: the Bealtaine / Lúnasa arc (Samhain / Imbolc is the same, south)
     'uniform vec3 festivalArcColor;',
     'uniform vec3 equinoxArcColor;',
+    'uniform vec2 moonStandstills;', // degrees: the major and minor standstill limits (north; south is the same)
+    'uniform float moonParallax;', // degrees
+    'uniform vec3 moonStandstillColor;',
+    'uniform float showSunArcs;', // 1 to show, 0 to hide
+    'uniform float showMoonArcs;',
     'varying vec3 vDirection;',
     '',
     // how much the atmosphere lifts things near the horizon (degrees), Bennett's formula as in astro.js
@@ -157,6 +170,21 @@ var SKY_FRAGMENT_SHADER = [
     '    float degPerPixel = fwidth(declination);',
     '',
     '    float aboveHorizon = smoothstep(-0.5, 0.0, apparentAlt);',
+    '',
+    // the moon's standstill limits: the same idea, but also taking out the moon's parallax (which makes it
+    // look lower than it would from the Earth's centre), so the arcs line up with where the moon appears.
+    // the major standstill is solid and thin, the minor one dashed; drawn beneath the sun's arcs
+    '    float moonTrueAlt = trueAlt + radians(moonParallax * cos(radians(apparentAlt)));',
+    '    vec3 moonDir = vec3(compass.x * cos(moonTrueAlt), sin(moonTrueAlt), compass.y * cos(moonTrueAlt));',
+    '    float moonDeclination = degrees(asin(clamp(dot(moonDir, pole), -1.0, 1.0)));',
+    '    float moonDegPerPixel = fwidth(moonDeclination);',
+    '    float majorArc = 0.45 * max(line(moonDeclination, moonStandstills.x, moonDegPerPixel, 0.6),',
+    '                                line(moonDeclination, -moonStandstills.x, moonDegPerPixel, 0.6));',
+    '    float minorArc = 0.4 * step(0.5, fract(hourAngle / 4.0)) * max(line(moonDeclination, moonStandstills.y, moonDegPerPixel, 0.6),',
+    '                                                                   line(moonDeclination, -moonStandstills.y, moonDegPerPixel, 0.6));',
+    '    color = mix(color, moonStandstillColor, max(majorArc, minorArc) * aboveHorizon * showMoonArcs);',
+    '',
+    '    aboveHorizon *= showSunArcs;', // everything below is the sun's
     '    float summerArc = 0.45 * line(declination, arcDeclinations.x, degPerPixel, 0.6);',
     '    float winterArc = 0.45 * line(declination, arcDeclinations.y, degPerPixel, 0.6);',
     // the fire festival arcs are fainter and dashed (dashes 3 deg of hour angle long), the equinox arc faint and thin
@@ -203,7 +231,12 @@ function makeSkyDome() {
             todayArcColor: { value: srgbColor(TODAY_ARC_COLOR) },
             festivalDeclination: { value: 0 },
             festivalArcColor: { value: srgbColor(FESTIVAL_ARC_COLOR) },
-            equinoxArcColor: { value: srgbColor(EQUINOX_ARC_COLOR) }
+            equinoxArcColor: { value: srgbColor(EQUINOX_ARC_COLOR) },
+            moonStandstills: { value: new THREE.Vector2() },
+            moonParallax: { value: MOON_MEAN_PARALLAX },
+            moonStandstillColor: { value: srgbColor(MOON_STANDSTILL_COLOR) },
+            showSunArcs: { value: 1 },
+            showMoonArcs: { value: 1 }
         },
         vertexShader: SKY_VERTEX_SHADER,
         fragmentShader: SKY_FRAGMENT_SHADER,
@@ -309,10 +342,14 @@ var moon = new THREE.Mesh(
 var moonOffset = new THREE.Vector3(); // from the observer to the moon
 scene.add(moon);
 
-// sun arcs and horizon markers
-// the arcs (the sun's path at midsummer, midwinter and today) are drawn by the sky shader.
-// where each arc meets the horizon, a thin tick and a small label mark the sunrise / sunset direction.
-// like the moon, the markers are kept centred on the observer, as they mark directions rather than places
+// sun and moon arcs, and horizon markers
+// the sun's arcs (midsummer, midwinter, the fire festivals, the equinoxes and today) and the limits of
+// the moon's range (its major and minor standstills) are circles of constant declination, drawn by the sky shader.
+// the moon's path tonight isn't: its declination can shift several degrees in a night, so it's traced from
+// its calculated positions and drawn as a line. where each arc meets the horizon, a thin tick and a small
+// label mark the rising / setting direction.
+// like the moon, the markers and the moon's path are kept centred on the observer, as they mark directions
+// rather than places. the sun's and moon's arcs (with their markers) can be shown or hidden separately
 
 // a small text label for the sky, about heightDeg tall as seen from the observer at MARKER_DISTANCE
 function makeSkyLabel(text, color, heightDeg, opacity) {
@@ -336,34 +373,45 @@ function makeSkyLabel(text, color, heightDeg, opacity) {
 
     var texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
-    var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: opacity }));
+    // labels are mostly transparent, so they mustn't hide what's behind them from the depth buffer
+    var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: opacity, depthWrite: false }));
     var height = MARKER_DISTANCE * Math.tan(THREE.MathUtils.degToRad(heightDeg));
     sprite.scale.set(height * canvas.width / canvas.height, height, 1);
     return sprite;
 }
 
-// a marker facing north (azimuth 0); setMarkerAzimuth turns it to face the right way.
+function markerHeight(altitude) {
+    return MARKER_DISTANCE * Math.tan(THREE.MathUtils.degToRad(altitude));
+}
+
+// a marker facing north (azimuth 0), added to the given group; setMarkerAzimuth turns it to face
+// the right way, and setMarkerRow sets how high its label sits.
 // labels sit above the direction columns' labels (which reach about 7.5 deg above the horizon)
-function makeHorizonMarker(text, color, labelAltitude, opacity) {
+function makeHorizonMarker(group, text, color, labelAltitude, opacity) {
     var marker = new THREE.Group();
-    var toHeight = function(altitude) { return MARKER_DISTANCE * Math.tan(THREE.MathUtils.degToRad(altitude)); };
 
     // the tick starts a little below the horizon so it meets the edge of the plain
     var tick = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(0, toHeight(-2), -MARKER_DISTANCE),
-            new THREE.Vector3(0, toHeight(labelAltitude - 1.2), -MARKER_DISTANCE)
-        ]),
+        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, markerHeight(-2), -MARKER_DISTANCE), new THREE.Vector3()]),
         new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: opacity * 0.7 })
     );
     marker.add(tick);
 
     var label = makeSkyLabel(text, color, 2.8, opacity);
-    label.position.set(0, toHeight(labelAltitude), -MARKER_DISTANCE);
     marker.add(label);
 
-    horizonMarkers.add(marker);
+    marker.userData = { tick: tick, label: label };
+    setMarkerRow(marker, labelAltitude);
+    group.add(marker);
     return marker;
+}
+
+function setMarkerRow(marker, labelAltitude) {
+    marker.userData.label.position.set(0, markerHeight(labelAltitude), -MARKER_DISTANCE);
+    var tickPositions = marker.userData.tick.geometry.attributes.position;
+    tickPositions.setXYZ(1, 0, markerHeight(labelAltitude - 1.2), -MARKER_DISTANCE);
+    tickPositions.needsUpdate = true;
+    marker.userData.tick.geometry.computeBoundingSphere();
 }
 
 function setMarkerAzimuth(marker, azimuth) {
@@ -375,31 +423,61 @@ function setMarkerAzimuth(marker, azimuth) {
 
 var horizonMarkers = new THREE.Group();
 scene.add(horizonMarkers);
+var sunMarkerGroup = new THREE.Group();
+var moonMarkerGroup = new THREE.Group();
+horizonMarkers.add(sunMarkerGroup, moonMarkerGroup);
 
-// the labels sit in three rows so that neighbouring markers (as little as ~15 deg apart) don't overlap:
-// solstices and equinoxes, today, then the fire festivals
+// the labels sit in rows so that neighbouring markers (as little as ~15 deg apart) don't overlap.
+// the sun's: solstices and equinoxes, today, then the fire festivals. the moon's use the same heights
+// when shown on their own, and move up above the sun's when both are shown
 var MARKER_ROWS = { seasons: 8, today: 11.2, festivals: 14.4 };
+var MOON_MARKER_ROWS = { major: 8, tonight: 11.2, minor: 14.4 };
+var MOON_MARKER_ROWS_RAISE = 9.6; // added to the moon's rows when the sun's markers are shown too
 
 var markers = {
-    summerRise: makeHorizonMarker('Midsummer sunrise', SUMMER_ARC_COLOR, MARKER_ROWS.seasons, 0.75),
-    summerSet: makeHorizonMarker('Midsummer sunset', SUMMER_ARC_COLOR, MARKER_ROWS.seasons, 0.75),
-    winterRise: makeHorizonMarker('Midwinter sunrise', WINTER_ARC_COLOR, MARKER_ROWS.seasons, 0.75),
-    winterSet: makeHorizonMarker('Midwinter sunset', WINTER_ARC_COLOR, MARKER_ROWS.seasons, 0.75),
-    equinoxRise: makeHorizonMarker('Equinox sunrise', EQUINOX_ARC_COLOR, MARKER_ROWS.seasons, 0.6),
-    equinoxSet: makeHorizonMarker('Equinox sunset', EQUINOX_ARC_COLOR, MARKER_ROWS.seasons, 0.6),
-    brightHalfRise: makeHorizonMarker('Bealtaine / Lúnasa sunrise', FESTIVAL_ARC_COLOR, MARKER_ROWS.festivals, 0.7),
-    brightHalfSet: makeHorizonMarker('Bealtaine / Lúnasa sunset', FESTIVAL_ARC_COLOR, MARKER_ROWS.festivals, 0.7),
-    darkHalfRise: makeHorizonMarker('Samhain / Imbolc sunrise', FESTIVAL_ARC_COLOR, MARKER_ROWS.festivals, 0.7),
-    darkHalfSet: makeHorizonMarker('Samhain / Imbolc sunset', FESTIVAL_ARC_COLOR, MARKER_ROWS.festivals, 0.7),
-    todayRise: makeHorizonMarker('Sunrise', TODAY_ARC_COLOR, MARKER_ROWS.today, 0.95),
-    todaySet: makeHorizonMarker('Sunset', TODAY_ARC_COLOR, MARKER_ROWS.today, 0.95)
+    summerRise: makeHorizonMarker(sunMarkerGroup, 'Midsummer sunrise', SUMMER_ARC_COLOR, MARKER_ROWS.seasons, 0.75),
+    summerSet: makeHorizonMarker(sunMarkerGroup, 'Midsummer sunset', SUMMER_ARC_COLOR, MARKER_ROWS.seasons, 0.75),
+    winterRise: makeHorizonMarker(sunMarkerGroup, 'Midwinter sunrise', WINTER_ARC_COLOR, MARKER_ROWS.seasons, 0.75),
+    winterSet: makeHorizonMarker(sunMarkerGroup, 'Midwinter sunset', WINTER_ARC_COLOR, MARKER_ROWS.seasons, 0.75),
+    equinoxRise: makeHorizonMarker(sunMarkerGroup, 'Equinox sunrise', EQUINOX_ARC_COLOR, MARKER_ROWS.seasons, 0.6),
+    equinoxSet: makeHorizonMarker(sunMarkerGroup, 'Equinox sunset', EQUINOX_ARC_COLOR, MARKER_ROWS.seasons, 0.6),
+    brightHalfRise: makeHorizonMarker(sunMarkerGroup, 'Bealtaine / Lúnasa sunrise', FESTIVAL_ARC_COLOR, MARKER_ROWS.festivals, 0.7),
+    brightHalfSet: makeHorizonMarker(sunMarkerGroup, 'Bealtaine / Lúnasa sunset', FESTIVAL_ARC_COLOR, MARKER_ROWS.festivals, 0.7),
+    darkHalfRise: makeHorizonMarker(sunMarkerGroup, 'Samhain / Imbolc sunrise', FESTIVAL_ARC_COLOR, MARKER_ROWS.festivals, 0.7),
+    darkHalfSet: makeHorizonMarker(sunMarkerGroup, 'Samhain / Imbolc sunset', FESTIVAL_ARC_COLOR, MARKER_ROWS.festivals, 0.7),
+    todayRise: makeHorizonMarker(sunMarkerGroup, 'Sunrise', TODAY_ARC_COLOR, MARKER_ROWS.today, 0.95),
+    todaySet: makeHorizonMarker(sunMarkerGroup, 'Sunset', TODAY_ARC_COLOR, MARKER_ROWS.today, 0.95)
 };
 
-// azimuth (degrees) where a point at the given declination rises, as seen from the given latitude,
-// with the rising azimuth east of north and the setting one mirrored in the west;
-// null if it never rises or never sets there. uses the same horizon as the arcs (lifted by refraction)
-function riseAzimuth(declination, latitude) {
-    var h0 = -atmosphericRefraction(0);
+// the moon's standstill markers come in northern and southern pairs, both labelled the same:
+// over a couple of weeks at a standstill the moon rises at (or near) both
+var moonMarkers = {
+    majorNorthRise: makeHorizonMarker(moonMarkerGroup, 'Major standstill moonrise', MOON_STANDSTILL_COLOR, MOON_MARKER_ROWS.major, 0.75),
+    majorNorthSet: makeHorizonMarker(moonMarkerGroup, 'Major standstill moonset', MOON_STANDSTILL_COLOR, MOON_MARKER_ROWS.major, 0.75),
+    majorSouthRise: makeHorizonMarker(moonMarkerGroup, 'Major standstill moonrise', MOON_STANDSTILL_COLOR, MOON_MARKER_ROWS.major, 0.75),
+    majorSouthSet: makeHorizonMarker(moonMarkerGroup, 'Major standstill moonset', MOON_STANDSTILL_COLOR, MOON_MARKER_ROWS.major, 0.75),
+    minorNorthRise: makeHorizonMarker(moonMarkerGroup, 'Minor standstill moonrise', MOON_STANDSTILL_COLOR, MOON_MARKER_ROWS.minor, 0.65),
+    minorNorthSet: makeHorizonMarker(moonMarkerGroup, 'Minor standstill moonset', MOON_STANDSTILL_COLOR, MOON_MARKER_ROWS.minor, 0.65),
+    minorSouthRise: makeHorizonMarker(moonMarkerGroup, 'Minor standstill moonrise', MOON_STANDSTILL_COLOR, MOON_MARKER_ROWS.minor, 0.65),
+    minorSouthSet: makeHorizonMarker(moonMarkerGroup, 'Minor standstill moonset', MOON_STANDSTILL_COLOR, MOON_MARKER_ROWS.minor, 0.65),
+    tonightRise: makeHorizonMarker(moonMarkerGroup, 'Moonrise', MOON_PATH_COLOR, MOON_MARKER_ROWS.tonight, 0.95),
+    tonightSet: makeHorizonMarker(moonMarkerGroup, 'Moonset', MOON_PATH_COLOR, MOON_MARKER_ROWS.tonight, 0.95)
+};
+
+// where things at the observer's (apparent) horizon really are, in degrees of altitude:
+// the sun's centre is lifted above it by refraction; the moon's is also lowered by parallax
+// (it's close enough that seen from the Earth's surface it sits about 0.95 deg lower than from its centre)
+function sunHorizonAltitude() {
+    return -atmosphericRefraction(0);
+}
+function moonHorizonAltitude() {
+    return MOON_MEAN_PARALLAX - atmosphericRefraction(0);
+}
+
+// azimuth (degrees) where a point at the given declination crosses the horizon altitude h0, as seen from
+// the given latitude, with the rising azimuth east of north and the setting one mirrored in the west;
+// null if it never rises or never sets there
+function riseAzimuth(declination, latitude, h0) {
     var cosA = (Math.sin(THREE.MathUtils.degToRad(declination)) - (Math.sin(THREE.MathUtils.degToRad(latitude)) * Math.sin(THREE.MathUtils.degToRad(h0))))
              / (Math.cos(THREE.MathUtils.degToRad(latitude)) * Math.cos(THREE.MathUtils.degToRad(h0)));
     if(!(Math.abs(cosA) <= 1)) {
@@ -408,18 +486,18 @@ function riseAzimuth(declination, latitude) {
     return THREE.MathUtils.radToDeg(Math.acos(cosA));
 }
 
-function setArcMarkers(riseMarker, setMarker, declination, latitude) {
-    var az = riseAzimuth(declination, latitude);
+function setArcMarkers(riseMarker, setMarker, declination, latitude, h0) {
+    var az = riseAzimuth(declination, latitude, h0);
     setMarkerAzimuth(riseMarker, az);
     setMarkerAzimuth(setMarker, az === null ? null : 360 - az);
 }
 
-// updates the arcs and markers for the observer's place and time
+// the sun's arcs and markers for the observer's place and time
 // (trueObliquity, calcSunEquatorial, greenwichSiderealTime and atmosphericRefraction are from astro.js / sun.js)
 function setSunArcs(obs) {
     // at the solstices the sun's declination is the tilt of the Earth's axis, north or south;
     // "midsummer" is the local one, so in the southern hemisphere it's the December solstice
-    var tilt = trueObliquity((dateToJD(obs.date) - 2451545.0) / 36525);
+    var tilt = earthTilt(obs.date);
     var summer = obs.lat >= 0 ? tilt : -tilt;
     var sun = calcSunEquatorial(obs.date);
 
@@ -438,12 +516,199 @@ function setSunArcs(obs) {
     uniforms.festivalDeclination.value = festival;
     uniforms.sunHourAngle.value = hourAngle;
 
-    setArcMarkers(markers.summerRise, markers.summerSet, summer, obs.lat);
-    setArcMarkers(markers.winterRise, markers.winterSet, -summer, obs.lat);
-    setArcMarkers(markers.equinoxRise, markers.equinoxSet, 0, obs.lat);
-    setArcMarkers(markers.brightHalfRise, markers.brightHalfSet, festival, obs.lat);
-    setArcMarkers(markers.darkHalfRise, markers.darkHalfSet, -festival, obs.lat);
-    setArcMarkers(markers.todayRise, markers.todaySet, sun.dec, obs.lat);
+    var h0 = sunHorizonAltitude();
+    setArcMarkers(markers.summerRise, markers.summerSet, summer, obs.lat, h0);
+    setArcMarkers(markers.winterRise, markers.winterSet, -summer, obs.lat, h0);
+    setArcMarkers(markers.equinoxRise, markers.equinoxSet, 0, obs.lat, h0);
+    setArcMarkers(markers.brightHalfRise, markers.brightHalfSet, festival, obs.lat, h0);
+    setArcMarkers(markers.darkHalfRise, markers.darkHalfSet, -festival, obs.lat, h0);
+    setArcMarkers(markers.todayRise, markers.todaySet, sun.dec, obs.lat, h0);
+}
+
+function earthTilt(date) {
+    return trueObliquity((dateToJD(date) - 2451545.0) / 36525);
+}
+
+// the moon's path: its current pass across the sky if it's up, otherwise its next one.
+// drawn as two lines, dimmer for the part it has already travelled, brighter for the part still to come
+var moonPath = new THREE.Group();
+scene.add(moonPath);
+var moonPathLines = [];
+
+function makeMoonPathLine(points, opacity) {
+    var geometry = new LineGeometry();
+    geometry.setPositions(points);
+    var material = new LineMaterial({ color: MOON_PATH_COLOR, linewidth: 2.2, transparent: true, opacity: opacity, depthWrite: false });
+    material.resolution.set(window.innerWidth, window.innerHeight);
+    var line = new Line2(geometry, material);
+    line.computeLineDistances();
+    moonPath.add(line);
+    moonPathLines.push(line);
+}
+
+function clearMoonPath() {
+    moonPathLines.forEach(function(line) {
+        moonPath.remove(line);
+        line.geometry.dispose();
+        line.material.dispose();
+    });
+    moonPathLines = [];
+}
+
+var MINUTE = 60000;
+
+// the moment (within a minute) between t1 and t2 when the moon crosses the horizon
+function findMoonHorizonCrossing(t1, t2, lat, lon) {
+    var up1 = calcMoonPosition(new Date(t1), lat, lon).altitude > 0;
+    while(t2 - t1 > MINUTE) {
+        var mid = (t1 + t2) / 2;
+        if((calcMoonPosition(new Date(mid), lat, lon).altitude > 0) == up1) {
+            t1 = mid;
+        } else {
+            t2 = mid;
+        }
+    }
+    return (t1 + t2) / 2;
+}
+
+// the moon's current (or next) pass: { rise, set } times in ms, either of which may be null if it doesn't
+// rise / set within the search window (e.g. at high latitudes); null if it doesn't come up at all
+function findMoonPass(date, lat, lon) {
+    var STEP = 10 * MINUTE;
+    var now = date.getTime();
+    var altitude = function(t) { return calcMoonPosition(new Date(t), lat, lon).altitude; };
+    var t;
+
+    var start = now;
+    if(altitude(now) <= 0) {
+        // not up: look ahead for the next moonrise
+        for(t = now + STEP; t <= now + (26 * 60 * MINUTE) && altitude(t) <= 0; t += STEP) {}
+        if(t > now + (26 * 60 * MINUTE)) {
+            return null;
+        }
+        start = t;
+    }
+
+    var rise = null, set = null;
+    for(t = start - STEP; t >= start - (20 * 60 * MINUTE); t -= STEP) {
+        if(altitude(t) <= 0) {
+            rise = findMoonHorizonCrossing(t, t + STEP, lat, lon);
+            break;
+        }
+    }
+    for(t = start + STEP; t <= start + (20 * 60 * MINUTE); t += STEP) {
+        if(altitude(t) <= 0) {
+            set = findMoonHorizonCrossing(t - STEP, t, lat, lon);
+            break;
+        }
+    }
+    return { rise: rise, set: set, windowStart: start - (20 * 60 * MINUTE), windowEnd: start + (20 * 60 * MINUTE) };
+}
+
+function moonPathPoint(t, lat, lon) {
+    var pos = calcMoonPosition(new Date(t), lat, lon);
+    return skyDirection(pos.azimuth, Math.max(pos.altitude, 0)).multiplyScalar(MOON_PATH_DISTANCE);
+}
+
+function moonPathPoints(from, to, lat, lon) {
+    var STEP = 5 * MINUTE;
+    var points = [];
+    for(var t = from; t < to; t += STEP) {
+        points.push(moonPathPoint(t, lat, lon));
+    }
+    points.push(moonPathPoint(to, lat, lon));
+    var flat = [];
+    points.forEach(function(p) { flat.push(p.x, p.y, p.z); });
+    return flat;
+}
+
+function setMoonPath(obs) {
+    clearMoonPath();
+    var pass = findMoonPass(obs.date, obs.lat, obs.lon);
+
+    setMarkerAzimuth(moonMarkers.tonightRise, pass && pass.rise !== null ? calcMoonPosition(new Date(pass.rise), obs.lat, obs.lon).azimuth : null);
+    setMarkerAzimuth(moonMarkers.tonightSet, pass && pass.set !== null ? calcMoonPosition(new Date(pass.set), obs.lat, obs.lon).azimuth : null);
+    if(!pass) {
+        return;
+    }
+
+    var from = pass.rise !== null ? pass.rise : pass.windowStart;
+    var to = pass.set !== null ? pass.set : pass.windowEnd;
+    var now = obs.date.getTime();
+    if(now > from) {
+        makeMoonPathLine(moonPathPoints(from, Math.min(now, to), obs.lat, obs.lon), 0.45);
+    }
+    if(now < to) {
+        makeMoonPathLine(moonPathPoints(Math.max(now, from), to, obs.lat, obs.lon), 0.85);
+    }
+}
+
+// the moon's arcs and markers for the observer's place and time.
+// the moon's orbit is tilted about 5.1 deg to the ecliptic, so over its 18.6 year cycle the limit of its
+// monthly swing north and south varies between tilt - 5.1 (minor standstill, ~18.3 deg) and
+// tilt + 5.1 (major standstill, ~28.6 deg). these are the widest the moon can reach at each
+function setMoonArcs(obs) {
+    var tilt = earthTilt(obs.date);
+    var major = tilt + MOON_ORBIT_INCLINATION;
+    var minor = tilt - MOON_ORBIT_INCLINATION;
+    skyDome.material.uniforms.moonStandstills.value.set(major, minor);
+
+    var h0 = moonHorizonAltitude();
+    setArcMarkers(moonMarkers.majorNorthRise, moonMarkers.majorNorthSet, major, obs.lat, h0);
+    setArcMarkers(moonMarkers.majorSouthRise, moonMarkers.majorSouthSet, -major, obs.lat, h0);
+    setArcMarkers(moonMarkers.minorNorthRise, moonMarkers.minorNorthSet, minor, obs.lat, h0);
+    setArcMarkers(moonMarkers.minorSouthRise, moonMarkers.minorSouthSet, -minor, obs.lat, h0);
+
+    setMoonPath(obs);
+}
+
+// showing / hiding the sun's and moon's arcs (and their markers), remembered between visits where possible
+var ARC_TOGGLES_KEY = 'irishcal.viewer.arcs';
+var sunArcsToggle = document.getElementById('showSunArcs');
+var moonArcsToggle = document.getElementById('showMoonArcs');
+
+function applyArcToggles() {
+    var showSun = sunArcsToggle.checked;
+    var showMoon = moonArcsToggle.checked;
+
+    skyDome.material.uniforms.showSunArcs.value = showSun ? 1 : 0;
+    skyDome.material.uniforms.showMoonArcs.value = showMoon ? 1 : 0;
+    sunMarkerGroup.visible = showSun;
+    moonMarkerGroup.visible = showMoon;
+    moonPath.visible = showMoon;
+
+    var raise = showSun ? MOON_MARKER_ROWS_RAISE : 0;
+    setMarkerRow(moonMarkers.majorNorthRise, MOON_MARKER_ROWS.major + raise);
+    setMarkerRow(moonMarkers.majorNorthSet, MOON_MARKER_ROWS.major + raise);
+    setMarkerRow(moonMarkers.majorSouthRise, MOON_MARKER_ROWS.major + raise);
+    setMarkerRow(moonMarkers.majorSouthSet, MOON_MARKER_ROWS.major + raise);
+    setMarkerRow(moonMarkers.minorNorthRise, MOON_MARKER_ROWS.minor + raise);
+    setMarkerRow(moonMarkers.minorNorthSet, MOON_MARKER_ROWS.minor + raise);
+    setMarkerRow(moonMarkers.minorSouthRise, MOON_MARKER_ROWS.minor + raise);
+    setMarkerRow(moonMarkers.minorSouthSet, MOON_MARKER_ROWS.minor + raise);
+    setMarkerRow(moonMarkers.tonightRise, MOON_MARKER_ROWS.tonight + raise);
+    setMarkerRow(moonMarkers.tonightSet, MOON_MARKER_ROWS.tonight + raise);
+
+    try {
+        localStorage.setItem(ARC_TOGGLES_KEY, JSON.stringify({ sun: showSun, moon: showMoon }));
+    } catch(e) {
+        // storage can be unavailable (e.g. private browsing); the toggles still work for this visit
+    }
+}
+
+function initArcToggles() {
+    try {
+        var saved = JSON.parse(localStorage.getItem(ARC_TOGGLES_KEY));
+        if(saved) {
+            sunArcsToggle.checked = saved.sun !== false;
+            moonArcsToggle.checked = saved.moon !== false;
+        }
+    } catch(e) {
+        // nothing saved, or storage unavailable: keep the defaults
+    }
+    sunArcsToggle.addEventListener('change', applyArcToggles);
+    moonArcsToggle.addEventListener('change', applyArcToggles);
+    applyArcToggles();
 }
 
 // places the moon (degrees: azimuth clockwise from north, altitude above the horizon, apparent diameter)
@@ -480,7 +745,8 @@ function makeLabelSprite(text) {
 
     var texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
-    var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+    // (mostly transparent, so it mustn't hide what's behind it from the depth buffer)
+    var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
     sprite.scale.set(3, 1.5, 1);
     return sprite;
 }
@@ -741,6 +1007,7 @@ function onObserverChange(obs) {
     var moonPos = calcMoonPosition(obs.date, obs.lat, obs.lon);
     setMoon(moonPos.azimuth, moonPos.altitude, moonPos.diameter);
     document.getElementById('moonPosition').textContent = formatSkyPosition(moonPos);
+    setMoonArcs(obs);
 
     var phase = calcMoonIllumination(obs.date);
     document.getElementById('moonPhase').textContent = phase.name + ' · ' + Math.round(phase.illumination * 100) + '% lit';
@@ -752,7 +1019,12 @@ function formatSkyPosition(pos) {
     return formatHeading(pos.azimuth) + ' · ' + Math.abs(alt) + '° ' + (alt >= 0 ? 'above' : 'below') + ' the horizon';
 }
 
-document.getElementById('observer').addEventListener('input', readObserverInputs);
+document.getElementById('observer').addEventListener('input', function(e) {
+    // the arc toggles live in the same panel, but don't change the observer (they have their own handler)
+    if(e.target !== sunArcsToggle && e.target !== moonArcsToggle) {
+        readObserverInputs();
+    }
+});
 document.getElementById('observer').addEventListener('submit', function(e) {
     e.preventDefault();
     if(document.activeElement) document.activeElement.blur();
@@ -781,6 +1053,7 @@ function animate(time) {
     moon.position.copy(camera.position).add(moonOffset);
     moon.lookAt(camera.position); // the moon's disc always faces the observer
     horizonMarkers.position.copy(camera.position);
+    moonPath.position.copy(camera.position);
 
     renderer.render(scene, camera);
 }
@@ -789,8 +1062,13 @@ window.addEventListener('resize', function() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    // the moon's path lines are sized in pixels, so need to know the screen size
+    moonPathLines.forEach(function(line) {
+        line.material.resolution.set(window.innerWidth, window.innerHeight);
+    });
 });
 
+initArcToggles();
 initObserverInputs();
 readObserverInputs();
 resetView();

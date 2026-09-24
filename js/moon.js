@@ -263,3 +263,32 @@ function moonPhaseName(age) {
     if(age < 270) return 'Waning gibbous';
     return 'Waning crescent';
 }
+
+// lunar standstills: the moon's monthly swing north and south is widest (major standstill, about +/-28.6 deg)
+// when its orbit's ascending node is at the spring equinox point (longitude 0), and narrowest (minor
+// standstill, about +/-18.3 deg) when it's at the autumn equinox point (180). the node drifts backwards
+// around the ecliptic once every 18.6 years, so each comes round every 18.6 years, 9.3 years apart
+
+// mean longitude of the moon's ascending node (degrees), Meeus 47.7; T is Julian centuries from J2000.0
+function moonMeanNodeLongitude(T) {
+    return 125.0445479 - (1934.1362891 * T) + (0.0020754 * T * T) + ((T * T * T) / 467441) - ((T * T * T * T) / 60616000);
+}
+
+// the next major ('major') or minor ('minor') standstill after the given date, as a Date.
+// the standstills are broad (the moon's limits barely change for a year or two either side),
+// so this is the moment the mean node passes the equinox point, good to within a month or so
+function calcNextStandstill(date, type) {
+    var target = (type === 'major') ? 0 : 180;
+    var NODE_RATE = 1934.1362891; // degrees per Julian century (the node moves backwards)
+
+    var T0 = (dateToJD(date) - 2451545.0) / 36525;
+    var node0 = moonMeanNodeLongitude(T0);
+    var toGo = ((((node0 - target) % 360) + 360) % 360) || 360; // degrees the node has still to move back
+    var goal = node0 - toGo;
+
+    var T = T0 + (toGo / NODE_RATE);
+    for(var i = 0; i < 4; i++) {
+        T += (moonMeanNodeLongitude(T) - goal) / NODE_RATE;
+    }
+    return jdToDate(2451545.0 + (T * 36525));
+}
