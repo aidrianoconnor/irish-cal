@@ -153,9 +153,6 @@
             #infoDialog p { margin: 0 0 .5rem; }
             #infoDialog ul { margin: 0 0 .5rem; padding-left: 1.2rem; }
             #infoDialog li { margin-bottom: .25rem; }
-            #infoDialog .key { display: grid; grid-template-columns: 1.6rem auto; gap: .2rem .5rem; align-items: center; margin: 0 0 .5rem; }
-            #infoDialog .swatch { width: 1.4rem; height: 0; border-top: 3px solid; }
-            #infoDialog .swatch.dashed { border-top-style: dashed; }
             #infoDialog .note { font-size: .8rem; opacity: .8; }
             #infoDialog .buttons { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .9rem; }
             #infoDialog .buttons button {
@@ -285,15 +282,6 @@
             <h3>The arcs across the sky</h3>
             <p>Each arc is the path the sun or moon takes across the sky on a particular day; where it meets the
                 horizon, a marker shows the rising or setting point.</p>
-            <div class="key">
-                <span class="swatch" style="border-color: #ffc94d"></span><span>Midsummer (the sun's highest, longest path)</span>
-                <span class="swatch" style="border-color: #a9c6ff"></span><span>Midwinter (its lowest, shortest)</span>
-                <span class="swatch" style="border-color: #d6e4d2"></span><span>The equinoxes (due east to due west)</span>
-                <span class="swatch dashed" style="border-color: #ff8a3d"></span><span>The fire festivals</span>
-                <span class="swatch" style="border-color: #ffffff"></span><span>Today's sun, brighter where it has still to go</span>
-                <span class="swatch" style="border-color: #d9d2ff"></span><span>The moon's path tonight</span>
-                <span class="swatch" style="border-color: #b3a2f0"></span><span>The limits of the moon's range at its major (solid) and minor (dashed) standstills</span>
-            </div>
             <p><strong>Hover over or tap a marker's label</strong> for the next date of what it marks, the sunrise or
                 sunset time that day, and its compass bearing, so you can find the direction outside with a phone's
                 compass. Tap anywhere else to close it.</p>
@@ -318,7 +306,9 @@
             </ul>
             <p class="note">Bearings are from true north, and rise / set times assume a level horizon: hills delay a
                 sunrise and move it a little. The fire festivals are taken as the points halfway between the solstices
-                and equinoxes.</p>
+                and equinoxes, as opposed to their traditional 1st day of the Gregorian calendar month. You can always
+                update the Observer dates to the 1st of the month to see the Sun and Moon locations for the traditional
+                Fire Festival dates.</p>
 
             <div class="buttons">
                 <button id="infoDontShow" type="button">Don't show this again</button>
