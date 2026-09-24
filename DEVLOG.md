@@ -149,6 +149,7 @@ any calculation
 | 10:52 | `f03fa9e` | about a thousand scattered rocks, gathering in the stony patches |
 | 10:54 | `9966a77` | tussocks of grass, in the season's colours |
 | 11:04 | `37609ec` | night: the ground and stones were just black; a stronger, cooler night light and "night sight" around the observer |
+| 11:08 | `aa8ca2d` | moonlight (by phase and height, with soft shadows), and a brighter base night |
 
 ### decisions
 
@@ -276,7 +277,13 @@ any calculation
 - **night sight**: at night the landscape was black. the all-round night light is stronger and cooler (0.3 -> 0.55,
   bluer), and a dim, cool point light 10 m above the observer (intensity 7, fading to nothing by 45 m, a little past
   the stones, with a gentle falloff) comes up as the daylight goes, like eyes adjusted to the dark. it follows the
-  observer. no moonlight yet: the moon doesn't light the ground (a possible next step, with moon shadows)
+  observer
+- **moonlight**: a second directional light from the moon (cool, `#c3cff0`), intensity 1.6 x illumination^1.5 x
+  how far up it is (0 below -1 deg, full by 10 deg), off in daylight, so a full moon well up clearly lights the
+  landscape and a crescent hardly does. soft shadows from a 1024 map over the same 130 m square as the sun's. the
+  base night was also brightened (all-round 0.55 -> 0.75, night sight 7 -> 10)
+- the moon's shadows stay switched on even with no moonlight: switching a light's shadows on / off changes how
+  many shadow maps the shaders use, so every material recompiles (a hitch each time the moon rose or set)
 
 ### validation
 
