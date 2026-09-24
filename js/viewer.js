@@ -848,7 +848,8 @@ function updateKeyControls() {
 }
 
 window.addEventListener('keydown', function(e) {
-    if(ARROW_KEYS.indexOf(e.key) > -1 && !isTypingTarget(e.target)) {
+    // (not while the location dialog is open over the view)
+    if(ARROW_KEYS.indexOf(e.key) > -1 && !isTypingTarget(e.target) && !locationDialog.open) {
         heldKeys[e.key] = true;
         updateKeyControls();
         e.preventDefault();
@@ -967,10 +968,39 @@ var lonInput = document.getElementById('lon');
 var dateInput = document.getElementById('date');
 var timeInput = document.getElementById('time');
 
+// the last latitude / longitude used, so the viewer reopens at the same place (the date and time always
+// start at now)
+var LOCATION_KEY = 'irishcal.viewer.location';
+
 function initObserverInputs() {
     var now = new Date();
     dateInput.value = now.toISOString().slice(0, 10);
     timeInput.value = now.toISOString().slice(11, 16);
+
+    try {
+        var saved = JSON.parse(localStorage.getItem(LOCATION_KEY));
+        if(saved && Math.abs(saved.lat) <= 90 && Math.abs(saved.lon) <= 180) {
+            latInput.value = saved.lat;
+            lonInput.value = saved.lon;
+        }
+    } catch(e) {
+        // nothing saved, or storage unavailable: start at the default (Newgrange)
+    }
+}
+
+function saveLocation() {
+    try {
+        localStorage.setItem(LOCATION_KEY, JSON.stringify({ lat: observer.lat, lon: observer.lon }));
+    } catch(e) {
+        // storage unavailable: the location just won't be remembered
+    }
+}
+
+// sets the latitude / longitude fields (e.g. from the Google Maps dialog) and updates the view
+function setLocation(lat, lon) {
+    latInput.value = lat;
+    lonInput.value = lon;
+    readObserverInputs();
 }
 
 function readNumberInput(input, min, max) {
@@ -993,6 +1023,9 @@ function readObserverInputs() {
     if(lon !== null) observer.lon = lon;
     if(dateValid) observer.date = date;
 
+    if(lat !== null || lon !== null) {
+        saveLocation();
+    }
     onObserverChange(observer);
 }
 
@@ -1050,6 +1083,62 @@ document.getElementById('observer').addEventListener('input', function(e) {
 document.getElementById('observer').addEventListener('submit', function(e) {
     e.preventDefault();
     if(document.activeElement) document.activeElement.blur();
+});
+
+// the "how to get your lat / long" dialog: paste coordinates or a Google Maps link, read by
+// parseMapsLocation (from location.js, loaded as a regular script before this module)
+
+var locationDialog = document.getElementById('locationDialog');
+var locationPaste = document.getElementById('locationPaste');
+var locationResult = document.getElementById('locationResult');
+var locationApply = document.getElementById('locationApply');
+var pastedLocation = null; // { lat, lon } read from the paste field, if it could be
+
+function openLocationDialog() {
+    locationPaste.value = '';
+    showPastedLocation();
+    // open the map where the observer is now, to make finding a nearby spot easier
+    document.getElementById('mapsLink').href = 'https://www.google.com/maps/@' + observer.lat + ',' + observer.lon + ',15z';
+    locationDialog.showModal();
+    locationPaste.focus();
+}
+
+function showPastedLocation() {
+    var text = locationPaste.value.trim();
+    var parsed = text ? parseMapsLocation(text) : null;
+    pastedLocation = (parsed && !parsed.error) ? parsed : null;
+    locationApply.disabled = !pastedLocation;
+    locationResult.classList.toggle('found', !!pastedLocation);
+    locationResult.classList.toggle('error', !!(parsed && parsed.error));
+    locationResult.textContent = !parsed ? ''
+        : pastedLocation ? 'Found: latitude ' + pastedLocation.lat + ', longitude ' + pastedLocation.lon
+        : parsed.error;
+}
+
+document.getElementById('findLocation').addEventListener('click', openLocationDialog);
+locationPaste.addEventListener('input', showPastedLocation);
+document.getElementById('locationForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    if(pastedLocation) {
+        setLocation(pastedLocation.lat, pastedLocation.lon);
+        locationDialog.close();
+    }
+});
+document.getElementById('locationCancel').addEventListener('click', function() {
+    locationDialog.close();
+});
+document.getElementById('locationDefault').addEventListener('click', function() {
+    setLocation(latInput.defaultValue, lonInput.defaultValue); // the values in the page's HTML
+    locationDialog.close();
+});
+// clicking the dimmed backdrop (outside the dialog's box) closes it too
+locationDialog.addEventListener('click', function(e) {
+    if(e.target === locationDialog) {
+        var box = locationDialog.getBoundingClientRect();
+        if(e.clientX < box.left || e.clientX > box.right || e.clientY < box.top || e.clientY > box.bottom) {
+            locationDialog.close();
+        }
+    }
 });
 
 // render loop

@@ -10,8 +10,8 @@ ideas for the 3D viewer (viewer.html), roughly in the order we plan to tackle th
 
 ## observer location
 
-- [ ] **set the location from a Google Maps pin**: a field to paste a Google Maps pin URL into, with the latitude and longitude extracted from it and applied to the lat / long fields. a "how to get your lat / long easily" link opens a modal explaining how to go to Google Maps, drop a pin and copy its URL, with the paste field in the same modal; the lat / long are extracted and applied from there
-- [ ] **remember the last latitude / longitude used**, stored in a cookie (or local storage, like the arc toggles) so the viewer reopens at the same place
+- [x] **set the location from a Google Maps pin**: a "how to get your lat / long easily" link opens a dialog explaining how to copy a spot's coordinates from Google Maps, with a field that reads either the coordinates (decimal, or degrees / minutes / seconds) or a full Google Maps link and applies them to the lat / long fields. short Share links (maps.app.goo.gl) can't be read from a web page, so the dialog says to copy the coordinates instead
+- [x] **remember the last latitude / longitude used**, in local storage (like the arc toggles) so the viewer reopens at the same place; "Back to Newgrange" in the dialog returns to the default
 
 ## the scene
 
