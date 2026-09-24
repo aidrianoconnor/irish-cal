@@ -1216,19 +1216,130 @@ function makeLabelSprite(text) {
     return sprite;
 }
 
+// standing stones: each direction is marked by a rough stone, generated from its own fixed random seed, so the
+// same eight stones appear every time. each is a slab (broad faces towards the centre, as in stone circles),
+// wider at its flared base and narrowing towards an uneven, sloping top, with lumps, a slight lean and twist,
+// and lichen. the cardinal directions have the taller stones
+
+// smooth random values in 3D (value noise), 0 to 1, for the stones' shapes and colours
+function stoneNoise(x, y, z, seed) {
+    var ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+    var fx = x - ix, fy = y - iy, fz = z - iz;
+    fx = fx * fx * (3 - (2 * fx));
+    fy = fy * fy * (3 - (2 * fy));
+    fz = fz * fz * (3 - (2 * fz));
+    var h = function(dx, dy, dz) {
+        var v = Math.sin(((ix + dx) * 127.1) + ((iy + dy) * 269.5) + ((iz + dz) * 311.7) + (seed * 74.7)) * 43758.5453;
+        return v - Math.floor(v);
+    };
+    var lerp = THREE.MathUtils.lerp;
+    return lerp(lerp(lerp(h(0, 0, 0), h(1, 0, 0), fx), lerp(h(0, 1, 0), h(1, 1, 0), fx), fy),
+                lerp(lerp(h(0, 0, 1), h(1, 0, 1), fx), lerp(h(0, 1, 1), h(1, 1, 1), fx), fy), fz);
+}
+
+// a random number from 0 to 1 for a stone's seed and the name of what it's for
+function stoneRandom(seed, what) {
+    return stoneNoise(seed * 3.1 + what, what * 1.7, seed * 0.9, 99);
+}
+
+var STONE_AROUND = 28; // vertices around each ring of a stone
+var STONE_LEVELS = 20; // rings from its buried base up to its top
+var STONE_BURIED = 0.2; // metres set into the ground
+var STONE_COLORS = {
+    rock: new THREE.Color('#858279'),
+    damp: new THREE.Color('#5d5b54'), // near the ground
+    lichen: new THREE.Color('#a9ab8b'),
+    paleLichen: new THREE.Color('#c4c3b6')
+};
+
+// the stone's geometry, in its own space: y up from ground level, its broad faces along +/-z (towards / away
+// from the centre once it's turned into place), with vertex colours
+function makeStoneGeometry(seed, cardinal) {
+    var height = (cardinal ? 2.3 : 1.5) + (0.35 * stoneRandom(seed, 1));
+    var width = (cardinal ? 1.0 : 0.8) + (0.2 * stoneRandom(seed, 2)); // at the base, side to side
+    var thickness = width * (0.4 + (0.2 * stoneRandom(seed, 3))); // at the base, front to back
+    var taper = 0.55 + (0.2 * stoneRandom(seed, 4)); // how wide the top is compared with the base
+    var squareness = 2.6 + (1.4 * stoneRandom(seed, 5)); // 2 is an ellipse, higher is boxier
+    var lean = { x: 0.06 * (stoneRandom(seed, 6) - 0.5), z: 0.06 * (stoneRandom(seed, 7) - 0.5) }; // per metre up
+    var twist = 0.5 * (stoneRandom(seed, 8) - 0.5); // radians from base to top
+    var topSlope = { x: 0.8 * (stoneRandom(seed, 9) - 0.5), z: 0.3 * (stoneRandom(seed, 10) - 0.5) }; // the top's tilt
+    var total = height + STONE_BURIED;
+
+    var positions = [], colors = [];
+    var color = new THREE.Color();
+    var point = function(x, y, z) {
+        // lichen grows in patches, more on the upper parts; the base is darker and damp
+        var lichen = THREE.MathUtils.smoothstep(stoneNoise(x * 2.2, y * 2.2, z * 2.2, seed + 50), 0.58, 0.72);
+        var pale = THREE.MathUtils.smoothstep(stoneNoise(x * 4, y * 4, z * 4, seed + 60), 0.66, 0.78);
+        color.copy(STONE_COLORS.rock).multiplyScalar(0.85 + (0.3 * stoneNoise(x * 6, y * 6, z * 6, seed + 70)));
+        color.lerp(STONE_COLORS.lichen, 0.7 * lichen * THREE.MathUtils.smoothstep(y, 0.2, 0.9));
+        color.lerp(STONE_COLORS.paleLichen, 0.6 * pale * THREE.MathUtils.smoothstep(y, 0.5, 1.4));
+        color.lerp(STONE_COLORS.damp, 0.8 * (1 - THREE.MathUtils.smoothstep(y, -0.05, 0.35)));
+        positions.push(x, y, z);
+        colors.push(color.r, color.g, color.b);
+    };
+
+    for(var level = 0; level <= STONE_LEVELS; level++) {
+        var v = level / STONE_LEVELS; // 0 at the buried base, 1 at the top
+        var y0 = (v * total) - STONE_BURIED;
+        // narrowing upwards, flared at the foot, and rounding off only over the last few per cent, so the top is
+        // blunt (and sloping) rather than pointed
+        var scale = THREE.MathUtils.lerp(1, taper, Math.pow(v, 1.2)) * (1 + (0.12 * (1 - THREE.MathUtils.smoothstep(v, 0, 0.15))));
+        if(v > 0.93) {
+            scale *= 0.55 + (0.45 * Math.sqrt(Math.max(0, 1 - Math.pow((v - 0.93) / 0.07, 2))));
+        }
+        var angleTwist = twist * v;
+        for(var a = 0; a < STONE_AROUND; a++) {
+            var theta = (a / STONE_AROUND) * Math.PI * 2;
+            var c = Math.cos(theta), s = Math.sin(theta);
+            // a rounded-box outline (a superellipse), then lumps: big ones, and smaller ones
+            var r = 1 / Math.pow(Math.pow(Math.abs(c) / (width / 2), squareness) + Math.pow(Math.abs(s) / (thickness / 2), squareness), 1 / squareness);
+            var lumps = (0.7 * (stoneNoise(c * 1.2, y0 * 0.9, s * 1.2, seed) - 0.5)) + (0.3 * (stoneNoise(c * 3, y0 * 2.5, s * 3, seed + 10) - 0.5));
+            r *= scale * (1 + (0.36 * lumps));
+            var x = r * Math.cos(theta + angleTwist), z = r * Math.sin(theta + angleTwist);
+            var y = y0 + (v > 0.7 ? ((topSlope.x * x) + (topSlope.z * z)) * THREE.MathUtils.smoothstep(v, 0.7, 1) : 0);
+            point(x + (lean.x * Math.max(y, 0)), y, z + (lean.z * Math.max(y, 0)));
+        }
+    }
+    // the very top, closing it off
+    var topY = height + (0.04 * (stoneRandom(seed, 11) - 0.5));
+    point(lean.x * topY, topY, lean.z * topY);
+
+    var indices = [];
+    for(var l = 0; l < STONE_LEVELS; l++) {
+        for(var k = 0; k < STONE_AROUND; k++) {
+            var i0 = (l * STONE_AROUND) + k, i1 = (l * STONE_AROUND) + ((k + 1) % STONE_AROUND);
+            var j0 = i0 + STONE_AROUND, j1 = i1 + STONE_AROUND;
+            indices.push(i0, j0, j1, i0, j1, i1); // (facing outwards)
+        }
+    }
+    var apex = positions.length / 3 - 1, lastRing = STONE_LEVELS * STONE_AROUND;
+    for(var t = 0; t < STONE_AROUND; t++) {
+        indices.push(lastRing + t, apex, lastRing + ((t + 1) % STONE_AROUND));
+    }
+
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    return geometry;
+}
+
+var stoneMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
+
 function makeDirectionMarker(direction) {
-    var height = direction.cardinal ? 2.4 : 1.6;
     var marker = new THREE.Group();
 
-    var column = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.3, 0.35, height, 24),
-        new THREE.MeshStandardMaterial({ color: direction.cardinal ? '#ffffff' : '#d4d4d4', roughness: .8 })
-    );
-    column.position.y = height / 2;
-    marker.add(column);
+    var seed = 1 + (direction.azimuth / 45);
+    var stone = new THREE.Mesh(makeStoneGeometry(seed, direction.cardinal), stoneMaterial);
+    // broad faces towards the centre (its +z axis turned to point outwards), give or take a little
+    stone.rotation.y = -THREE.MathUtils.degToRad(direction.azimuth) + (0.25 * (stoneRandom(seed, 12) - 0.5));
+    marker.add(stone);
 
     var label = makeLabelSprite(direction.label);
-    label.position.y = height + 1.1;
+    label.position.y = stone.geometry.boundingBox.max.y + 1.1;
     marker.add(label);
 
     var pos = azimuthToXZ(direction.azimuth, COLUMN_DISTANCE);
